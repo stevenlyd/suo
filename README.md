@@ -73,26 +73,26 @@ npm install --prefix "$HOME/.local" --global \
 
 ### Install the skill
 
-Hermes:
-
-```bash
-hermes skills install stevenlyd/intent-loop/skills/intent-loop --yes
-```
-
-Pi uses the repository as a native Pi package:
-
-```bash
-pi install git:github.com/stevenlyd/intent-loop
-```
-
-Codex and Pi can share one user-global Agent Skills installation:
+For Hermes, Pi, and Codex on the same machine, install one shared Agent Skill:
 
 ```bash
 npx --yes skills add stevenlyd/intent-loop --global \
   --agent codex pi --skill intent-loop --yes
 ```
 
-The CLI is host-independent and only needs to be installed once. Each agent host still needs to discover the skill through its own registry or a shared `~/.agents/skills` installation.
+The installer places the skill in `~/.agents/skills`, which all three hosts discover. Pi and Codex do **not** need separate copies in this setup.
+
+Alternatively, choose one host-native installation route:
+
+```bash
+# Hermes: security-scanned install with Hermes update tracking
+hermes skills install stevenlyd/intent-loop/skills/intent-loop --yes
+
+# Pi: native Pi package with `pi update` tracking
+pi install git:github.com/stevenlyd/intent-loop
+```
+
+Do not combine shared and host-native routes on the same machine; duplicate skill discovery is unnecessary. The CLI is host-independent and only needs to be installed once.
 
 ### Run locally from source
 
