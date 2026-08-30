@@ -20,7 +20,8 @@ Use IntentLoop to move from a vague idea to exactly one bounded Product action, 
 Install the CLI once from the public GitHub repository:
 
 ```bash
-npm install --global github:stevenlyd/intent-loop
+npm install --global \
+  https://github.com/stevenlyd/intent-loop/archive/refs/tags/v0.1.0.tar.gz
 ```
 
 Confirm `iloop --help` works before using this skill.

@@ -57,9 +57,12 @@ Requires Node.js 22.18+ and pnpm.
 The package is not yet published to npm. Install the public GitHub repository directly:
 
 ```bash
-npm install --global github:stevenlyd/intent-loop
+npm install --global \
+  https://github.com/stevenlyd/intent-loop/archive/refs/tags/v0.1.0.tar.gz
 iloop --help
 ```
+
+The release archive is used deliberately: npm 11 with `install-links=false` can leave Git-based global installs pointing at a deleted temporary clone.
 
 ### Install the skill
 
