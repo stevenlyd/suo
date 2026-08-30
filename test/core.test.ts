@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   acceptClosure,
+  approveProposal,
   approveDecision,
   connectModules,
   createModule,
@@ -10,12 +11,13 @@ import {
   nextAction,
   proposeDecision,
   reopenDecision,
+  stageProposal,
   startRealization,
   submitClosure,
   updateModule,
   validateInvariants,
 } from '../src/core.js'
-import type { ClosureSubmission, ModuleContract, IntentLoopSnapshot } from '../src/model.js'
+import type { ClosureSubmission, ModuleContract, SuoSnapshot } from '../src/model.js'
 import { validateSnapshot } from '../src/validation.js'
 
 const time = '2026-08-30T00:00:00.000Z'
@@ -27,11 +29,11 @@ const contract = (prefix: string): ModuleContract => ({
   acceptance: [{ id: `${prefix}-acceptance`, text: `${prefix} works` }],
 })
 
-function product(): IntentLoopSnapshot {
+function product(): SuoSnapshot {
   return createProduct({ id: 'product:test', title: 'Test product', idea: 'I have an idea' }, { now: time })
 }
 
-function frozenModule(): IntentLoopSnapshot {
+function frozenModule(): SuoSnapshot {
   let snapshot = product()
   snapshot = createModule(snapshot, { id: 'module:a', title: 'Module A', contract: contract('a') }, { now: time })
   snapshot = proposeDecision(snapshot, {
@@ -50,7 +52,7 @@ const closure = (): ClosureSubmission => ({
   deviations: [], residualRisks: [], newProductQuestions: [],
 })
 
-describe('IntentLoop', () => {
+describe('Suo', () => {
   it('turns an idea into exactly one next action', () => {
     const snapshot = product()
     expect(nextAction(snapshot)).toMatchObject({ type: 'clarify_idea' })
@@ -129,7 +131,34 @@ describe('IntentLoop', () => {
     const snapshot = frozenModule()
     expect(validateSnapshot(snapshot)).toEqual([])
     expect(validateInvariants(snapshot)).toEqual([])
-    expect(validateSnapshot({ ...snapshot, schemaVersion: 2 })).toContain('/schemaVersion must be equal to constant')
+    expect(validateSnapshot({ ...snapshot, schemaVersion: 1 })).toContain('/schemaVersion must be equal to constant')
+  })
+
+  it('stages an agent proposal before owner authority and applies it atomically', () => {
+    let snapshot = product()
+    snapshot = stageProposal(snapshot, {
+      kind: 'proposal',
+      id: 'proposal:create-intake',
+      summary: 'Create the bounded idea-intake module',
+      operations: [{ type: 'create_module', module: { id: 'module:intake', title: 'Idea intake' } }],
+    }, { now: time })
+    expect(nextAction(snapshot)).toMatchObject({ type: 'review_proposal', proposalId: 'proposal:create-intake' })
+    expect(snapshot.modules).toEqual([])
+
+    snapshot = approveProposal(snapshot, 'proposal:create-intake', { now: time })
+    expect(snapshot.proposals[0]?.status).toBe('approved')
+    expect(snapshot.modules[0]).toMatchObject({ id: 'module:intake', title: 'Idea intake' })
+    expect(nextAction(snapshot)).toMatchObject({ type: 'define_module', moduleId: 'module:intake' })
+  })
+
+  it('rejects a proposal when Product authority changed after submission', () => {
+    let snapshot = product()
+    snapshot = stageProposal(snapshot, {
+      kind: 'proposal', id: 'proposal:stale', summary: 'Create A',
+      operations: [{ type: 'create_module', module: { id: 'module:a', title: 'A' } }],
+    }, { now: time })
+    snapshot = createModule(snapshot, { id: 'module:other', title: 'Other' }, { now: time })
+    expect(() => approveProposal(snapshot, 'proposal:stale', { now: time })).toThrow('proposal is stale')
   })
 
   it('changing a frozen contract invalidates its handoff', () => {

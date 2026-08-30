@@ -3,6 +3,7 @@ export type DecisionStatus = 'open' | 'proposed' | 'approved' | 'deferred' | 'su
 export type HandoffStatus = 'current' | 'in_delivery' | 'stale' | 'closed';
 export type RealizationStatus = 'in_progress' | 'closure_submitted' | 'closed' | 'reopened';
 export type ClosureStatus = 'submitted' | 'accepted' | 'rejected';
+export type ProposalStatus = 'pending' | 'approved' | 'rejected';
 export interface AcceptanceCriterion {
     id: string;
     text: string;
@@ -113,8 +114,106 @@ export interface Closure extends ClosureSubmission {
     verifier?: string;
     rejectionReason?: string;
 }
-export interface IntentLoopSnapshot {
-    schemaVersion: 1;
+export type ProductOperation = {
+    type: 'create_module';
+    module: {
+        id: string;
+        title: string;
+        phase?: string;
+        contract?: ModuleContract;
+    };
+} | {
+    type: 'update_module';
+    moduleId: string;
+    patch: {
+        title?: string;
+        phase?: string;
+        contract?: ModuleContract;
+    };
+} | {
+    type: 'delete_module';
+    moduleId: string;
+} | {
+    type: 'retire_module';
+    moduleId: string;
+} | {
+    type: 'connect_modules';
+    moduleId: string;
+    dependencyId: string;
+} | {
+    type: 'disconnect_modules';
+    moduleId: string;
+    dependencyId: string;
+} | {
+    type: 'record_decision';
+    decision: {
+        id: string;
+        moduleId: string;
+        question: string;
+        alternatives: Alternative[];
+        recommendation?: string;
+        choice: string;
+        rationale: string;
+        prerequisites: string[];
+        evidenceRefs: string[];
+    };
+} | {
+    type: 'update_decision';
+    decisionId: string;
+    patch: Partial<Pick<Decision, 'question' | 'alternatives' | 'recommendation' | 'prerequisites' | 'evidenceRefs'>>;
+} | {
+    type: 'delete_decision';
+    decisionId: string;
+} | {
+    type: 'approve_decision';
+    decisionId: string;
+    choice: string;
+    rationale: string;
+    evidenceRefs?: string[];
+} | {
+    type: 'defer_decision';
+    decisionId: string;
+    rationale: string;
+} | {
+    type: 'reopen_decision';
+    decisionId: string;
+    successorId?: string;
+} | {
+    type: 'freeze_module';
+    moduleId: string;
+} | {
+    type: 'reopen_closure';
+    realizationId: string;
+    reason: string;
+    decisionId?: string;
+};
+export interface Proposal {
+    id: string;
+    status: ProposalStatus;
+    summary: string;
+    baseDigest: string;
+    operations: ProductOperation[];
+    submittedAt: string;
+    decidedAt?: string;
+    rejectionReason?: string;
+}
+export interface ProposalSubmission {
+    kind: 'proposal';
+    id?: string;
+    summary: string;
+    operations: ProductOperation[];
+}
+export interface ClosureEnvelope {
+    kind: 'closure';
+    id?: string;
+    handoffId: string;
+    realizationId?: string;
+    agent?: string;
+    submission: ClosureSubmission;
+}
+export type SubmissionEnvelope = ProposalSubmission | ClosureEnvelope;
+export interface SuoSnapshot {
+    schemaVersion: 2;
     revision: number;
     product: {
         id: string;
@@ -127,12 +226,19 @@ export interface IntentLoopSnapshot {
     };
     modules: ProductModule[];
     decisions: Decision[];
+    proposals: Proposal[];
     handoffs: Handoff[];
     realizations: Realization[];
     closures: Closure[];
 }
 export type NextProductAction = {
     type: 'clarify_idea';
+    title: string;
+    whyNow: string;
+    expectedOutcome: string;
+} | {
+    type: 'review_proposal';
+    proposalId: string;
     title: string;
     whyNow: string;
     expectedOutcome: string;

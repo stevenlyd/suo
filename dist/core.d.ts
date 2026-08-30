@@ -1,4 +1,4 @@
-import type { ClosureSubmission, Decision, ModuleContract, NextProductAction, IntentLoopSnapshot } from './model.js';
+import type { ClosureEnvelope, ClosureSubmission, Decision, ModuleContract, NextProductAction, ProposalSubmission, SuoSnapshot } from './model.js';
 export interface MutationOptions {
     now?: string;
     id?: string;
@@ -9,43 +9,47 @@ export declare function createProduct(input: {
     idea: string;
     activeSlice?: string;
     profile?: string;
-}, options?: MutationOptions): IntentLoopSnapshot;
-export declare function createModule(snapshot: IntentLoopSnapshot, input: {
+}, options?: MutationOptions): SuoSnapshot;
+export declare function createModule(snapshot: SuoSnapshot, input: {
     id: string;
     title: string;
     phase?: string;
     contract?: ModuleContract;
-}, options?: MutationOptions): IntentLoopSnapshot;
-export declare function updateModule(snapshot: IntentLoopSnapshot, moduleId: string, patch: {
+}, options?: MutationOptions): SuoSnapshot;
+export declare function updateModule(snapshot: SuoSnapshot, moduleId: string, patch: {
     title?: string;
     phase?: string;
     contract?: ModuleContract;
-}, options?: MutationOptions): IntentLoopSnapshot;
-export declare function deleteDraftModule(snapshot: IntentLoopSnapshot, moduleId: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function retireModule(snapshot: IntentLoopSnapshot, moduleId: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function connectModules(snapshot: IntentLoopSnapshot, moduleId: string, dependencyId: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function disconnectModules(snapshot: IntentLoopSnapshot, moduleId: string, dependencyId: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function proposeDecision(snapshot: IntentLoopSnapshot, input: Omit<Decision, 'status' | 'ownerChoice' | 'rationale' | 'createdAt' | 'updatedAt'> & {
+}, options?: MutationOptions): SuoSnapshot;
+export declare function deleteDraftModule(snapshot: SuoSnapshot, moduleId: string, options?: MutationOptions): SuoSnapshot;
+export declare function retireModule(snapshot: SuoSnapshot, moduleId: string, options?: MutationOptions): SuoSnapshot;
+export declare function connectModules(snapshot: SuoSnapshot, moduleId: string, dependencyId: string, options?: MutationOptions): SuoSnapshot;
+export declare function disconnectModules(snapshot: SuoSnapshot, moduleId: string, dependencyId: string, options?: MutationOptions): SuoSnapshot;
+export declare function proposeDecision(snapshot: SuoSnapshot, input: Omit<Decision, 'status' | 'ownerChoice' | 'rationale' | 'createdAt' | 'updatedAt'> & {
     status?: 'open' | 'proposed';
-}, options?: MutationOptions): IntentLoopSnapshot;
-export declare function updateDecisionProposal(snapshot: IntentLoopSnapshot, decisionId: string, patch: Partial<Pick<Decision, 'question' | 'alternatives' | 'recommendation' | 'prerequisites' | 'evidenceRefs'>>, options?: MutationOptions): IntentLoopSnapshot;
-export declare function deleteDraftDecision(snapshot: IntentLoopSnapshot, decisionId: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function approveDecision(snapshot: IntentLoopSnapshot, decisionId: string, input: {
+}, options?: MutationOptions): SuoSnapshot;
+export declare function updateDecisionProposal(snapshot: SuoSnapshot, decisionId: string, patch: Partial<Pick<Decision, 'question' | 'alternatives' | 'recommendation' | 'prerequisites' | 'evidenceRefs'>>, options?: MutationOptions): SuoSnapshot;
+export declare function deleteDraftDecision(snapshot: SuoSnapshot, decisionId: string, options?: MutationOptions): SuoSnapshot;
+export declare function approveDecision(snapshot: SuoSnapshot, decisionId: string, input: {
     choice: string;
     rationale: string;
     evidenceRefs?: string[];
-}, options?: MutationOptions): IntentLoopSnapshot;
-export declare function deferDecision(snapshot: IntentLoopSnapshot, decisionId: string, rationale: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function reopenDecision(snapshot: IntentLoopSnapshot, decisionId: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function freezeModule(snapshot: IntentLoopSnapshot, moduleId: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function startRealization(snapshot: IntentLoopSnapshot, handoffId: string, input: {
+}, options?: MutationOptions): SuoSnapshot;
+export declare function deferDecision(snapshot: SuoSnapshot, decisionId: string, rationale: string, options?: MutationOptions): SuoSnapshot;
+export declare function reopenDecision(snapshot: SuoSnapshot, decisionId: string, options?: MutationOptions): SuoSnapshot;
+export declare function freezeModule(snapshot: SuoSnapshot, moduleId: string, options?: MutationOptions): SuoSnapshot;
+export declare function startRealization(snapshot: SuoSnapshot, handoffId: string, input: {
     id?: string;
     agent?: string;
-}, options?: MutationOptions): IntentLoopSnapshot;
-export declare function submitClosure(snapshot: IntentLoopSnapshot, realizationId: string, submission: ClosureSubmission, options?: MutationOptions): IntentLoopSnapshot;
-export declare function acceptClosure(snapshot: IntentLoopSnapshot, closureId: string, verifier: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function rejectClosure(snapshot: IntentLoopSnapshot, closureId: string, verifier: string, reason: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function reopenClosure(snapshot: IntentLoopSnapshot, realizationId: string, reason: string, options?: MutationOptions): IntentLoopSnapshot;
-export declare function nextAction(snapshot: IntentLoopSnapshot): NextProductAction;
-export declare function validateInvariants(snapshot: IntentLoopSnapshot): string[];
-export declare function moduleTopologicalOrder(snapshot: IntentLoopSnapshot): string[];
+}, options?: MutationOptions): SuoSnapshot;
+export declare function submitClosure(snapshot: SuoSnapshot, realizationId: string, submission: ClosureSubmission, options?: MutationOptions): SuoSnapshot;
+export declare function acceptClosure(snapshot: SuoSnapshot, closureId: string, verifier: string, options?: MutationOptions): SuoSnapshot;
+export declare function rejectClosure(snapshot: SuoSnapshot, closureId: string, verifier: string, reason: string, options?: MutationOptions): SuoSnapshot;
+export declare function reopenClosure(snapshot: SuoSnapshot, realizationId: string, reason: string, options?: MutationOptions): SuoSnapshot;
+export declare function stageProposal(snapshot: SuoSnapshot, input: ProposalSubmission, options?: MutationOptions): SuoSnapshot;
+export declare function approveProposal(snapshot: SuoSnapshot, proposalId: string, options?: MutationOptions): SuoSnapshot;
+export declare function rejectProposal(snapshot: SuoSnapshot, proposalId: string, reason: string, options?: MutationOptions): SuoSnapshot;
+export declare function submitClosureEnvelope(snapshot: SuoSnapshot, envelope: ClosureEnvelope, options?: MutationOptions): SuoSnapshot;
+export declare function nextAction(snapshot: SuoSnapshot): NextProductAction;
+export declare function validateInvariants(snapshot: SuoSnapshot): string[];
+export declare function moduleTopologicalOrder(snapshot: SuoSnapshot): string[];

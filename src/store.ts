@@ -1,32 +1,30 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { IntentLoopSnapshot } from './model.js'
+import type { SuoSnapshot } from './model.js'
 import { assertValidSnapshot } from './validation.js'
 
-export const workspaceDir = (root = process.cwd()) => join(root, '.intent-loop')
-export const snapshotPath = (root = process.cwd()) => join(workspaceDir(root), 'intent-loop.json')
+export const workspaceDir = (root = process.cwd()) => join(root, '.suo')
+export const snapshotPath = (root = process.cwd()) => join(workspaceDir(root), 'suo.json')
 
-export async function loadSnapshot(root = process.cwd()): Promise<IntentLoopSnapshot> {
-  const raw = JSON.parse(await readFile(snapshotPath(root), 'utf8')) as unknown
-  assertValidSnapshot(raw)
-  return raw
+export async function loadSnapshot(root = process.cwd()): Promise<SuoSnapshot> {
+  const value: unknown = JSON.parse(await readFile(snapshotPath(root), 'utf8'))
+  assertValidSnapshot(value)
+  return value
 }
 
-export async function saveSnapshot(snapshot: IntentLoopSnapshot, root = process.cwd()): Promise<void> {
+export async function saveSnapshot(snapshot: SuoSnapshot, root = process.cwd()): Promise<void> {
   assertValidSnapshot(snapshot)
-  const target = snapshotPath(root)
-  await mkdir(dirname(target), { recursive: true })
+  const path = snapshotPath(root)
+  await mkdir(dirname(path), { recursive: true })
   try {
-    const current = JSON.parse(await readFile(target, 'utf8')) as { revision?: unknown }
+    const current: unknown = JSON.parse(await readFile(path, 'utf8'))
+    assertValidSnapshot(current)
     const expected = snapshot.revision - 1
-    if (current.revision !== expected) throw new Error(`stale IntentLoop revision: expected ${String(current.revision)} -> ${expected}`)
+    if (current.revision !== expected) throw new Error(`stale Suo revision: expected ${String(current.revision)} -> ${expected}`)
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code
-    if (code !== 'ENOENT') throw error
-    if (snapshot.revision !== 0) throw new Error(`cannot create workspace at revision ${snapshot.revision}`)
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
-  const temporary = `${target}.${process.pid}.tmp`
-  await writeFile(temporary, `${JSON.stringify(snapshot, null, 2)}
-`, 'utf8')
-  await rename(temporary, target)
+  const temporary = `${path}.${process.pid}.tmp`
+  await writeFile(temporary, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8')
+  await rename(temporary, path)
 }

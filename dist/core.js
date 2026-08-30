@@ -14,7 +14,7 @@ export function createProduct(input, options = {}) {
     if (!input.title.trim() || !input.idea.trim())
         throw new Error('title and idea are required');
     return {
-        schemaVersion: 1,
+        schemaVersion: 2,
         revision: 0,
         product: {
             id: id('product', input.id),
@@ -25,7 +25,7 @@ export function createProduct(input, options = {}) {
             createdAt: timestamp,
             updatedAt: timestamp,
         },
-        modules: [], decisions: [], handoffs: [], realizations: [], closures: [],
+        modules: [], decisions: [], proposals: [], handoffs: [], realizations: [], closures: [],
     };
 }
 const emptyContract = () => ({ objective: '', frozenBehavior: [], scope: [], nonGoals: [], acceptance: [] });
@@ -348,7 +348,94 @@ export function reopenClosure(snapshot, realizationId, reason, options = {}) {
     });
     return commit(next, timestamp);
 }
+export function stageProposal(snapshot, input, options = {}) {
+    if (!input.summary.trim())
+        throw new Error('proposal summary is required');
+    if (!input.operations.length)
+        throw new Error('proposal requires at least one operation');
+    const proposalId = id('proposal', input.id ?? options.id);
+    if (snapshot.proposals.some(value => value.id === proposalId))
+        throw new Error(`proposal already exists: ${proposalId}`);
+    const timestamp = now(options.now);
+    const next = copy(snapshot);
+    const proposal = {
+        id: proposalId,
+        status: 'pending',
+        summary: input.summary.trim(),
+        baseDigest: definitionDigest(snapshot),
+        operations: structuredClone(input.operations),
+        submittedAt: timestamp,
+    };
+    next.proposals.push(proposal);
+    return commit(next, timestamp);
+}
+export function approveProposal(snapshot, proposalId, options = {}) {
+    const proposal = requireProposal(snapshot, proposalId);
+    if (proposal.status !== 'pending')
+        throw new Error(`proposal is ${proposal.status}`);
+    if (proposal.baseDigest !== definitionDigest(snapshot))
+        throw new Error('proposal is stale; submit a revised proposal against current Product authority');
+    const timestamp = now(options.now);
+    let next = copy(snapshot);
+    for (const operation of proposal.operations)
+        next = applyProductOperation(next, operation, timestamp);
+    const approved = requireProposal(next, proposalId);
+    approved.status = 'approved';
+    approved.decidedAt = timestamp;
+    next.revision = snapshot.revision + 1;
+    next.product.updatedAt = timestamp;
+    return next;
+}
+export function rejectProposal(snapshot, proposalId, reason, options = {}) {
+    const next = copy(snapshot);
+    const proposal = requireProposal(next, proposalId);
+    if (proposal.status !== 'pending')
+        throw new Error(`proposal is ${proposal.status}`);
+    const timestamp = now(options.now);
+    proposal.status = 'rejected';
+    proposal.rejectionReason = reason.trim();
+    proposal.decidedAt = timestamp;
+    return commit(next, timestamp);
+}
+export function submitClosureEnvelope(snapshot, envelope, options = {}) {
+    const timestamp = now(options.now);
+    let next = copy(snapshot);
+    let realizationId = envelope.realizationId;
+    if (realizationId) {
+        const realization = requireRealization(next, realizationId);
+        if (realization.handoffId !== envelope.handoffId)
+            throw new Error('realization does not target the supplied handoff');
+    }
+    else {
+        const active = next.realizations.find(value => value.handoffId === envelope.handoffId && ['in_progress', 'reopened'].includes(value.status));
+        if (active)
+            realizationId = active.id;
+        else {
+            realizationId = id('realization');
+            next = startRealization(next, envelope.handoffId, {
+                id: realizationId,
+                ...(envelope.agent ? { agent: envelope.agent } : {}),
+            }, { now: timestamp });
+        }
+    }
+    next = submitClosure(next, realizationId, envelope.submission, {
+        ...(envelope.id ? { id: envelope.id } : {}),
+        now: timestamp,
+    });
+    next.revision = snapshot.revision + 1;
+    next.product.updatedAt = timestamp;
+    return next;
+}
 export function nextAction(snapshot) {
+    const pendingProposal = snapshot.proposals.find(value => value.status === 'pending');
+    if (pendingProposal)
+        return {
+            type: 'review_proposal',
+            proposalId: pendingProposal.id,
+            title: pendingProposal.summary,
+            whyNow: 'An agent proposal is awaiting explicit owner authority.',
+            expectedOutcome: 'Approve the exact change set or reject it with a concrete reason.',
+        };
     const submitted = snapshot.closures.find(value => value.status === 'submitted');
     if (submitted) {
         const realization = requireRealization(snapshot, submitted.realizationId);
@@ -387,7 +474,7 @@ export function nextAction(snapshot) {
 }
 export function validateInvariants(snapshot) {
     const issues = [];
-    for (const [label, values] of [['module', snapshot.modules], ['decision', snapshot.decisions], ['handoff', snapshot.handoffs], ['realization', snapshot.realizations], ['closure', snapshot.closures]]) {
+    for (const [label, values] of [['module', snapshot.modules], ['decision', snapshot.decisions], ['proposal', snapshot.proposals], ['handoff', snapshot.handoffs], ['realization', snapshot.realizations], ['closure', snapshot.closures]]) {
         const seen = new Set();
         for (const value of values)
             seen.has(value.id) ? issues.push(`duplicate ${label} id: ${value.id}`) : seen.add(value.id);
@@ -492,10 +579,75 @@ function downstream(snapshot, moduleId) {
     return [...result].sort();
 }
 function unlockCount(snapshot, moduleId) { return downstream(snapshot, moduleId).length; }
+function definitionDigest(snapshot) {
+    return createHash('sha256').update(JSON.stringify({
+        product: {
+            id: snapshot.product.id,
+            title: snapshot.product.title,
+            initialIdea: snapshot.product.initialIdea,
+            activeSlice: snapshot.product.activeSlice,
+            profile: snapshot.product.profile,
+        },
+        modules: snapshot.modules,
+        decisions: snapshot.decisions,
+    })).digest('hex');
+}
+function applyProductOperation(snapshot, operation, timestamp) {
+    const options = { now: timestamp };
+    switch (operation.type) {
+        case 'create_module': return createModule(snapshot, operation.module, options);
+        case 'update_module': return updateModule(snapshot, operation.moduleId, operation.patch, options);
+        case 'delete_module': return deleteDraftModule(snapshot, operation.moduleId, options);
+        case 'retire_module': return retireModule(snapshot, operation.moduleId, options);
+        case 'connect_modules': return connectModules(snapshot, operation.moduleId, operation.dependencyId, options);
+        case 'disconnect_modules': return disconnectModules(snapshot, operation.moduleId, operation.dependencyId, options);
+        case 'record_decision': {
+            const input = operation.decision;
+            let next = proposeDecision(snapshot, {
+                id: input.id,
+                moduleId: input.moduleId,
+                question: input.question,
+                alternatives: structuredClone(input.alternatives),
+                ...(input.recommendation ? { recommendation: input.recommendation } : {}),
+                prerequisites: [...input.prerequisites],
+                evidenceRefs: [...input.evidenceRefs],
+            }, options);
+            next = approveDecision(next, input.id, {
+                choice: input.choice,
+                rationale: input.rationale,
+                evidenceRefs: [...input.evidenceRefs],
+            }, options);
+            return next;
+        }
+        case 'update_decision': return updateDecisionProposal(snapshot, operation.decisionId, operation.patch, options);
+        case 'delete_decision': return deleteDraftDecision(snapshot, operation.decisionId, options);
+        case 'approve_decision': return approveDecision(snapshot, operation.decisionId, {
+            choice: operation.choice,
+            rationale: operation.rationale,
+            ...(operation.evidenceRefs ? { evidenceRefs: operation.evidenceRefs } : {}),
+        }, options);
+        case 'defer_decision': return deferDecision(snapshot, operation.decisionId, operation.rationale, options);
+        case 'reopen_decision': return reopenDecision(snapshot, operation.decisionId, {
+            ...(operation.successorId ? { id: operation.successorId } : {}),
+            now: timestamp,
+        });
+        case 'freeze_module': return freezeModule(snapshot, operation.moduleId, options);
+        case 'reopen_closure': return reopenClosure(snapshot, operation.realizationId, operation.reason, {
+            ...(operation.decisionId ? { id: operation.decisionId } : {}),
+            now: timestamp,
+        });
+        default: {
+            const unreachable = operation;
+            throw new Error(`unsupported Product operation: ${JSON.stringify(unreachable)}`);
+        }
+    }
+}
 function requireModule(snapshot, moduleId) { const value = snapshot.modules.find(item => item.id === moduleId); if (!value)
     throw new Error(`unknown module: ${moduleId}`); return value; }
 function requireDecision(snapshot, decisionId) { const value = snapshot.decisions.find(item => item.id === decisionId); if (!value)
     throw new Error(`unknown decision: ${decisionId}`); return value; }
+function requireProposal(snapshot, proposalId) { const value = snapshot.proposals.find(item => item.id === proposalId); if (!value)
+    throw new Error(`unknown proposal: ${proposalId}`); return value; }
 function requireHandoff(snapshot, handoffId) { const value = snapshot.handoffs.find(item => item.id === handoffId); if (!value)
     throw new Error(`unknown handoff: ${handoffId}`); return value; }
 function requireRealization(snapshot, realizationId) { const value = snapshot.realizations.find(item => item.id === realizationId); if (!value)

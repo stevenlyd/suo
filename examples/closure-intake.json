@@ -1,19 +1,25 @@
 {
-  "implementationRefs": [
-    { "kind": "commit", "uri": "https://example.test/repository/commit/abc123", "revision": "abc123" }
-  ],
-  "deliveredBehavior": [
-    "The exact idea is stored in intent-loop.json.",
-    "The CLI returns one structured NextProductAction."
-  ],
-  "acceptanceEvidence": [
-    { "acceptanceId": "intake-preserves-idea", "evidence": ["test: idea round-trip passed"], "result": "pass" },
-    { "acceptanceId": "intake-next-action", "evidence": ["test: single next action passed"], "result": "pass" }
-  ],
-  "checks": [
-    { "command": "pnpm check", "result": "pass", "evidenceRef": "local run" }
-  ],
-  "deviations": [],
-  "residualRisks": [],
-  "newProductQuestions": []
+  "kind": "closure",
+  "id": "closure:intake",
+  "handoffId": "handoff:module:intake:1",
+  "agent": "external-agent",
+  "submission": {
+    "implementationRefs": [
+      { "kind": "commit", "uri": "https://example.test/repository/commit/abc123", "revision": "abc123" }
+    ],
+    "deliveredBehavior": [
+      "The exact idea is stored in suo.json.",
+      "The CLI returns one structured NextProductAction."
+    ],
+    "acceptanceEvidence": [
+      { "acceptanceId": "intake-stored", "evidence": ["test:intake-stored"], "result": "pass" },
+      { "acceptanceId": "one-action", "evidence": ["test:one-action"], "result": "pass" }
+    ],
+    "checks": [
+      { "command": "pnpm check", "result": "pass", "evidenceRef": "run:ci-1" }
+    ],
+    "deviations": [],
+    "residualRisks": [],
+    "newProductQuestions": []
+  }
 }

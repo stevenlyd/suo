@@ -2,78 +2,33 @@
 import { readFile } from 'node:fs/promises'
 import {
   acceptClosure,
-  approveDecision,
-  connectModules,
-  createModule,
+  approveProposal,
   createProduct,
-  deferDecision,
-  deleteDraftDecision,
-  deleteDraftModule,
-  disconnectModules,
-  freezeModule,
   generateArtifacts,
   loadSnapshot,
   nextAction,
-  proposeDecision,
   rejectClosure,
-  reopenClosure,
-  reopenDecision,
-  retireModule,
+  rejectProposal,
+  renderNext,
   saveSnapshot,
-  startRealization,
-  submitClosure,
-  updateDecisionProposal,
-  updateModule,
+  stageProposal,
+  submitClosureEnvelope,
   validateSnapshot,
 } from './index.js'
-import type { ClosureSubmission, Decision, ModuleContract, IntentLoopSnapshot } from './model.js'
+import type { SubmissionEnvelope, SuoSnapshot } from './model.js'
 
 const argv = process.argv.slice(2)
 const command = argv.shift()
 
 try {
   switch (command) {
-    case 'init': {
-      const productId = flag('--id')
-      const activeSlice = flag('--slice')
-      const profile = flag('--profile')
-      const snapshot = createProduct({
-        title: requiredFlag('--title'), idea: requiredFlag('--idea'),
-        ...(productId ? { id: productId } : {}),
-        ...(activeSlice ? { activeSlice } : {}),
-        ...(profile ? { profile } : {}),
-      })
-      await saveSnapshot(snapshot)
-      await generateArtifacts(snapshot)
-      print({ workspace: '.intent-loop', revision: snapshot.revision, next: nextAction(snapshot) })
-      break
-    }
-    case 'next': {
-      const snapshot = await loadSnapshot()
-      print(nextAction(snapshot), argv.includes('--json'))
-      break
-    }
-    case 'status': {
-      const snapshot = await loadSnapshot()
-      print({ revision: snapshot.revision, product: snapshot.product, modules: snapshot.modules.map(value => ({ id: value.id, definitionStatus: value.definitionStatus })), handoffs: snapshot.handoffs.map(value => ({ id: value.id, status: value.status })), realizations: snapshot.realizations.map(value => ({ id: value.id, status: value.status })), next: nextAction(snapshot) })
-      break
-    }
-    case 'validate': {
-      const snapshot = await loadSnapshot()
-      const issues = validateSnapshot(snapshot)
-      if (issues.length) throw new Error(issues.join('\n'))
-      print({ valid: true, revision: snapshot.revision })
-      break
-    }
-    case 'generate': {
-      const snapshot = await loadSnapshot()
-      print({ generated: await generateArtifacts(snapshot), revision: snapshot.revision })
-      break
-    }
-    case 'module': await moduleCommand(); break
-    case 'decision': await decisionCommand(); break
-    case 'realization': await realizationCommand(); break
-    case 'closure': await closureCommand(); break
+    case 'init': await initCommand(); break
+    case 'next': await nextCommand(); break
+    case 'submit': await submitCommand(); break
+    case 'approve': await approveCommand(); break
+    case 'reject': await rejectCommand(); break
+    case 'inspect': await inspectCommand(); break
+    case 'check': await checkCommand(); break
     case 'help':
     case '--help':
     case '-h':
@@ -87,120 +42,105 @@ try {
   process.exitCode = 1
 }
 
-async function moduleCommand(): Promise<void> {
-  const action = argv.shift()
-  switch (action) {
-    case 'create': {
-      const moduleId = requiredArg('module id')
-      const phase = flag('--phase')
-      await mutate(snapshot => createModule(snapshot, { id: moduleId, title: requiredFlag('--title'), ...(phase ? { phase } : {}) }))
-      break
-    }
-    case 'update': {
-      const moduleId = requiredArg('module id')
-      const patch = await readJson<{ title?: string; phase?: string; contract?: ModuleContract }>(requiredFlag('--file'))
-      await mutate(snapshot => updateModule(snapshot, moduleId, patch))
-      break
-    }
-    case 'delete': await mutate(snapshot => deleteDraftModule(snapshot, requiredArg('module id'))); break
-    case 'retire': await mutate(snapshot => retireModule(snapshot, requiredArg('module id'))); break
-    case 'connect': {
-      const moduleId = requiredArg('module id')
-      const dependencyId = requiredArg('dependency id')
-      await mutate(snapshot => connectModules(snapshot, moduleId, dependencyId))
-      break
-    }
-    case 'disconnect': {
-      const moduleId = requiredArg('module id')
-      const dependencyId = requiredArg('dependency id')
-      await mutate(snapshot => disconnectModules(snapshot, moduleId, dependencyId))
-      break
-    }
-    case 'freeze': await mutate(snapshot => freezeModule(snapshot, requiredArg('module id'))); break
-    default: throw new Error(`unknown module command: ${String(action)}`)
+async function initCommand(): Promise<void> {
+  const positionalIdea = argv.find(value => !value.startsWith('--'))
+  const idea = flag('--idea') ?? positionalIdea
+  if (!idea?.trim()) throw new Error('usage: suo init "I have an idea..." [--title <title>]')
+  const title = flag('--title')?.trim() || idea.trim().split(/\s+/).slice(0, 8).join(' ')
+  const productId = flag('--id')
+  const activeSlice = flag('--slice')
+  const profile = flag('--profile')
+  const snapshot = createProduct({
+    title,
+    idea,
+    ...(productId ? { id: productId } : {}),
+    ...(activeSlice ? { activeSlice } : {}),
+    ...(profile ? { profile } : {}),
+  })
+  await saveSnapshot(snapshot)
+  await generateArtifacts(snapshot)
+  print({ workspace: '.suo', revision: snapshot.revision, next: nextAction(snapshot) })
+}
+
+async function nextCommand(): Promise<void> {
+  const action = nextAction(await loadSnapshot())
+  if (hasFlag('--json')) print(action, true)
+  else console.log(renderNext(action).replace(/^<!--[^\n]*-->\n?/, '').trim())
+}
+
+async function submitCommand(): Promise<void> {
+  const source = requiredArg('submission file or -')
+  const envelope = await readSubmission(source)
+  await mutate(snapshot => envelope.kind === 'proposal'
+    ? stageProposal(snapshot, envelope)
+    : submitClosureEnvelope(snapshot, envelope))
+}
+
+async function approveCommand(): Promise<void> {
+  const targetId = requiredArg('proposal or closure id')
+  if (!hasFlag('--yes')) throw new Error('approval requires --yes after explicit owner or verifier approval')
+  const verifier = flag('--verifier') ?? 'owner'
+  await mutate(snapshot => {
+    if (snapshot.proposals.some(value => value.id === targetId)) return approveProposal(snapshot, targetId)
+    if (snapshot.closures.some(value => value.id === targetId)) return acceptClosure(snapshot, targetId, verifier)
+    throw new Error(`unknown proposal or closure: ${targetId}`)
+  })
+}
+
+async function rejectCommand(): Promise<void> {
+  const targetId = requiredArg('proposal or closure id')
+  const reason = requiredFlag('--reason')
+  const verifier = flag('--verifier') ?? 'owner'
+  await mutate(snapshot => {
+    if (snapshot.proposals.some(value => value.id === targetId)) return rejectProposal(snapshot, targetId, reason)
+    if (snapshot.closures.some(value => value.id === targetId)) return rejectClosure(snapshot, targetId, verifier, reason)
+    throw new Error(`unknown proposal or closure: ${targetId}`)
+  })
+}
+
+async function inspectCommand(): Promise<void> {
+  const snapshot = await loadSnapshot()
+  const targetId = argv.find(value => !value.startsWith('--'))
+  if (!targetId) {
+    print({
+      revision: snapshot.revision,
+      product: snapshot.product,
+      modules: snapshot.modules.map(value => ({ id: value.id, title: value.title, status: value.definitionStatus })),
+      pendingProposals: snapshot.proposals.filter(value => value.status === 'pending').map(value => ({ id: value.id, summary: value.summary })),
+      handoffs: snapshot.handoffs.map(value => ({ id: value.id, status: value.status })),
+      closures: snapshot.closures.map(value => ({ id: value.id, status: value.status })),
+      next: nextAction(snapshot),
+    })
+    return
   }
+  const record = findRecord(snapshot, targetId)
+  if (!record) throw new Error(`unknown record: ${targetId}`)
+  print(record, hasFlag('--json'))
 }
 
-async function decisionCommand(): Promise<void> {
-  const action = argv.shift()
-  switch (action) {
-    case 'propose': {
-      const input = await readJson<Omit<Decision, 'status' | 'ownerChoice' | 'rationale' | 'createdAt' | 'updatedAt'> & { status?: 'open' | 'proposed' }>(requiredFlag('--file'))
-      await mutate(snapshot => proposeDecision(snapshot, input))
-      break
-    }
-    case 'update': {
-      const decisionId = requiredArg('decision id')
-      const patch = await readJson<Partial<Pick<Decision, 'question' | 'alternatives' | 'recommendation' | 'prerequisites' | 'evidenceRefs'>>>(requiredFlag('--file'))
-      await mutate(snapshot => updateDecisionProposal(snapshot, decisionId, patch))
-      break
-    }
-    case 'delete': await mutate(snapshot => deleteDraftDecision(snapshot, requiredArg('decision id'))); break
-    case 'approve': {
-      const decisionId = requiredArg('decision id')
-      await mutate(snapshot => approveDecision(snapshot, decisionId, { choice: requiredFlag('--choice'), rationale: requiredFlag('--rationale') }))
-      break
-    }
-    case 'defer': {
-      const decisionId = requiredArg('decision id')
-      await mutate(snapshot => deferDecision(snapshot, decisionId, requiredFlag('--rationale')))
-      break
-    }
-    case 'reopen': {
-      const decisionId = requiredArg('decision id')
-      const successorId = flag('--id')
-      await mutate(snapshot => reopenDecision(snapshot, decisionId, successorId ? { id: successorId } : {}))
-      break
-    }
-    default: throw new Error(`unknown decision command: ${String(action)}`)
-  }
+async function checkCommand(): Promise<void> {
+  const snapshot = await loadSnapshot()
+  const issues = validateSnapshot(snapshot)
+  if (issues.length) throw new Error(issues.join('\n'))
+  const generated = await generateArtifacts(snapshot)
+  print({ valid: true, revision: snapshot.revision, generated })
 }
 
-async function realizationCommand(): Promise<void> {
-  const action = argv.shift()
-  if (action !== 'start') throw new Error(`unknown realization command: ${String(action)}`)
-  const handoffId = requiredArg('handoff id')
-  const realizationId = flag('--id')
-  const agent = flag('--agent')
-  await mutate(snapshot => startRealization(snapshot, handoffId, { ...(realizationId ? { id: realizationId } : {}), ...(agent ? { agent } : {}) }))
-}
-
-async function closureCommand(): Promise<void> {
-  const action = argv.shift()
-  switch (action) {
-    case 'submit': {
-      const realizationId = requiredArg('realization id')
-      const submission = await readJson<ClosureSubmission>(requiredFlag('--file'))
-      const closureId = flag('--id')
-      await mutate(snapshot => submitClosure(snapshot, realizationId, submission, closureId ? { id: closureId } : {}))
-      break
-    }
-    case 'accept': {
-      const closureId = requiredArg('closure id')
-      await mutate(snapshot => acceptClosure(snapshot, closureId, requiredFlag('--verifier')))
-      break
-    }
-    case 'reject': {
-      const closureId = requiredArg('closure id')
-      await mutate(snapshot => rejectClosure(snapshot, closureId, requiredFlag('--verifier'), requiredFlag('--reason')))
-      break
-    }
-    case 'reopen': {
-      const realizationId = requiredArg('realization id')
-      const decisionId = flag('--decision-id')
-      await mutate(snapshot => reopenClosure(snapshot, realizationId, requiredFlag('--reason'), decisionId ? { id: decisionId } : {}))
-      break
-    }
-    default: throw new Error(`unknown closure command: ${String(action)}`)
-  }
-}
-
-async function mutate(operation: (snapshot: IntentLoopSnapshot) => IntentLoopSnapshot): Promise<void> {
+async function mutate(operation: (snapshot: SuoSnapshot) => SuoSnapshot): Promise<void> {
   const current = await loadSnapshot()
   const next = operation(current)
   if (next.revision !== current.revision) await saveSnapshot(next)
   await generateArtifacts(next)
   print({ revision: next.revision, next: nextAction(next) })
+}
+
+function findRecord(snapshot: SuoSnapshot, targetId: string): unknown {
+  if (snapshot.product.id === targetId) return snapshot.product
+  for (const values of [snapshot.modules, snapshot.decisions, snapshot.proposals, snapshot.handoffs, snapshot.realizations, snapshot.closures]) {
+    const value = values.find(item => item.id === targetId)
+    if (value) return value
+  }
+  return undefined
 }
 
 function flag(name: string): string | undefined {
@@ -211,36 +151,32 @@ function flag(name: string): string | undefined {
   argv.splice(index, 2)
   return value
 }
+function hasFlag(name: string): boolean { return argv.includes(name) }
 function requiredFlag(name: string): string { const value = flag(name); if (!value) throw new Error(`missing ${name}`); return value }
 function requiredArg(label: string): string { const value = argv.shift(); if (!value || value.startsWith('--')) throw new Error(`missing ${label}`); return value }
-async function readJson<T>(path: string): Promise<T> { return JSON.parse(await readFile(path, 'utf8')) as T }
+async function readSubmission(path: string): Promise<SubmissionEnvelope> {
+  const text = path === '-' ? await readStdin() : await readFile(path, 'utf8')
+  const value = JSON.parse(text) as Partial<SubmissionEnvelope>
+  if (value.kind !== 'proposal' && value.kind !== 'closure') throw new Error('submission kind must be proposal or closure')
+  return value as SubmissionEnvelope
+}
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = []
+  for await (const chunk of process.stdin) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  return Buffer.concat(chunks).toString('utf8')
+}
 function print(value: unknown, compact = false): void { console.log(JSON.stringify(value, null, compact ? 0 : 2)) }
 
-function helpText(): string { return `IntentLoop
+function helpText(): string { return `Suo 梭 — A shuttle for thought.
+
+Human interaction happens through the Suo Agent Skill. This CLI is the deterministic local protocol used by agents and CI.
 
 Usage:
-  iloop init --title <title> --idea <idea> [--id <id>] [--slice mvp]
-  iloop next [--json]
-  iloop status | validate | generate
-
-  iloop module create <id> --title <title> [--phase mvp]
-  iloop module update <id> --file <module-patch.json>
-  iloop module connect <module-id> <dependency-id>
-  iloop module disconnect <module-id> <dependency-id>
-  iloop module freeze <id>
-  iloop module delete <id>
-  iloop module retire <id>
-
-  iloop decision propose --file <decision.json>
-  iloop decision update <id> --file <patch.json>
-  iloop decision delete <id>
-  iloop decision approve <id> --choice <choice> --rationale <rationale>
-  iloop decision defer <id> --rationale <rationale>
-  iloop decision reopen <id> [--id <successor-id>]
-
-  iloop realization start <handoff-id> [--id <id>] [--agent <agent>]
-  iloop closure submit <realization-id> --file <closure.json> [--id <id>]
-  iloop closure accept <closure-id> --verifier <name>
-  iloop closure reject <closure-id> --verifier <name> --reason <reason>
-  iloop closure reopen <realization-id> --reason <reason>
+  suo init "I have an idea..." [--title <title>]
+  suo next [--json]
+  suo submit <submission.json|->
+  suo approve <proposal-or-closure-id> --yes [--verifier <name>]
+  suo reject <proposal-or-closure-id> --reason <reason> [--verifier <name>]
+  suo inspect [record-id] [--json]
+  suo check
 ` }

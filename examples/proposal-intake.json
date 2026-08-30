@@ -1,0 +1,42 @@
+{
+  "kind": "proposal",
+  "id": "proposal:intake",
+  "summary": "Create and define the idea-intake module",
+  "operations": [
+    {
+      "type": "create_module",
+      "module": {
+        "id": "module:intake",
+        "title": "Idea intake",
+        "phase": "mvp",
+        "contract": {
+          "objective": "Preserve the user's exact idea and expose one bounded next Product action.",
+          "frozenBehavior": ["The idea is stored verbatim.", "The default view contains exactly one NextProductAction."],
+          "scope": ["Single owner", "Single Product workspace"],
+          "nonGoals": ["Software implementation planning", "Automatic development-agent dispatch"],
+          "acceptance": [
+            { "id": "intake-stored", "text": "The exact idea is present in suo.json." },
+            { "id": "one-action", "text": "suo next --json returns exactly one action." }
+          ]
+        }
+      }
+    },
+    {
+      "type": "record_decision",
+      "decision": {
+        "id": "decision:single-action",
+        "moduleId": "module:intake",
+        "question": "What is the default unit of interaction after idea intake?",
+        "alternatives": [
+          { "id": "one", "label": "Exactly one bounded Product action" },
+          { "id": "backlog", "label": "A full backlog" }
+        ],
+        "recommendation": "Exactly one bounded Product action",
+        "choice": "Exactly one bounded Product action",
+        "rationale": "The interface stays linear even when the internal graph is not.",
+        "prerequisites": [],
+        "evidenceRefs": []
+      }
+    }
+  ]
+}

@@ -1,161 +1,124 @@
-# IntentLoop
+# Suo 梭
 
-**A graph underneath, one product decision at a time.**
+**A shuttle for thought.**
 
-IntentLoop starts with “I have an idea,” builds a durable Product definition graph, exposes exactly one bounded next Product action, compiles frozen modules into agent-ready handoffs, and accepts evidence-backed closure from external implementation agents.
+Suo helps a person think in one line while a multidimensional Product model takes form underneath.
 
-It deliberately stops short of planning or executing software development.
+> Your idea is the work. Suo is only the shuttle.
+
+## Start with a sentence
+
+People do not operate Suo by writing JSON or memorizing graph commands. Use it through a compatible Agent Skill and say:
+
+> I have an idea…
+
+The agent reads the current frontier, asks one bounded question, recommends an answer, shows the exact proposed change, and waits for explicit approval. Suo's deterministic kernel validates and commits the result.
+
+```text
+Human
+  → Hermes / Codex / Pi + Suo Skill
+  → suo CLI
+  → .suo/suo.json
+```
+
+## The weaving model
+
+- **Warp** — frozen dependencies, constraints, and Product structure.
+- **Shed** — the one opening currently allowed by the dependency frontier.
+- **Weft** — one bounded Product decision.
+- **Pick** — one proposal, approval, and authority commit.
+- **Shuttle** — the agent carries a decision out as a handoff and returns with closure evidence.
+- **Fabric** — the evolving Product authority.
+
+The public domain model keeps plain names such as `Decision`, `Handoff`, and `Closure`; the weaving language explains the interaction without making the API cryptic.
 
 ## The loop
 
 ```text
-idea
-  → provisional product modules
-  → one owner-decidable frontier action
-  → approved Product authority
-  → frozen module and versioned handoff
-  → external implementation agent
-  → closure submission and verification
-  → current realization state
-  → exactly one next Product action
+“I have an idea”
+→ exactly one NextProductAction
+→ agent proposal
+→ explicit owner approval
+→ frozen handoff
+→ external implementation
+→ closure submission
+→ verifier approval
+→ exactly one next action
 ```
 
-## Design boundaries
+Product-definition status and implementation reality remain separate. An external agent may submit evidence but cannot accept its own closure.
 
-- The full Product knowledge graph may contain cycles.
-- Only `requires-definition-of` module dependencies form the validated DAG.
-- Product definition and implementation realization are separate state axes.
-- Agents propose; owners approve Product authority.
-- External agents submit closure claims; verifiers accept closure.
-- Approved history is superseded or retired, not silently deleted.
-- Generated Markdown and Mermaid are projections of `intent-loop.json`.
+## CLI: local protocol for agents and CI
 
-## Current vertical slice
-
-The repository contains a working local-first kernel and CLI for:
-
-- idea/workspace initialization;
-- module create/update/delete/retire;
-- dependency connect/disconnect with cycle rejection;
-- decision propose/approve/defer/reopen;
-- deterministic next-action selection;
-- module freeze and versioned handoff generation;
-- realization start;
-- closure submit/accept/reject/reopen;
-- stale handoff and downstream invalidation;
-- JSON Schema and domain invariant validation;
-- generated `NEXT.md`, Product map, Mermaid DAG, handoffs, and closures.
-
-The canonical state is a single revisioned file at `.intent-loop/intent-loop.json`. Git is optional history and distribution, not a domain lifecycle.
-
-## Quick start
-
-Requires Node.js 22.18+ and pnpm.
-
-### Install the CLI
-
-The package is not yet published to npm. Install the public GitHub repository directly:
-
-```bash
-npm install --global \
-  https://github.com/stevenlyd/intent-loop/archive/refs/tags/v0.1.1.tar.gz
-iloop --help
-```
-
-The release archive is used deliberately: npm 11 with `install-links=false` can leave Git-based global installs pointing at a deleted temporary clone.
-
-If npm's configured global prefix is not on `PATH`, install into the conventional user prefix instead:
-
-```bash
-npm install --prefix "$HOME/.local" --global \
-  https://github.com/stevenlyd/intent-loop/archive/refs/tags/v0.1.1.tar.gz
-```
-
-### Install the skill
-
-For Hermes, Pi, and Codex on the same machine, install one shared Agent Skill:
-
-```bash
-npx --yes skills add stevenlyd/intent-loop --global \
-  --agent codex pi --skill intent-loop --yes
-```
-
-The installer places the skill in `~/.agents/skills`, which all three hosts discover. Pi and Codex do **not** need separate copies in this setup.
-
-Alternatively, choose one host-native installation route:
-
-```bash
-# Hermes: security-scanned install with Hermes update tracking
-hermes skills install stevenlyd/intent-loop/skills/intent-loop --yes
-
-# Pi: native Pi package with `pi update` tracking
-pi install git:github.com/stevenlyd/intent-loop
-```
-
-Do not combine shared and host-native routes on the same machine; duplicate skill discovery is unnecessary. The CLI is host-independent and only needs to be installed once.
-
-### Run locally from source
-
-```bash
-pnpm install
-pnpm build
-node dist/cli.js init \
-  --title "Example" \
-  --idea "I have an idea for a calmer way to define products"
-
-node dist/cli.js module create module:intake --title "Idea intake"
-node dist/cli.js module update module:intake --file examples/module-intake.json
-node dist/cli.js decision propose --file examples/decision-single-action.json
-node dist/cli.js decision approve decision:single-action \
-  --choice "Exactly one bounded Product action" \
-  --rationale "The interface is linear even when the internal graph is not"
-node dist/cli.js module freeze module:intake
-node dist/cli.js next
-```
-
-The freeze creates a handoff such as:
+Humans may use `next`, `inspect`, and `check` for visibility. Structured writes are intended for Agent Skills.
 
 ```text
-.intent-loop/generated/HANDOFFS/handoff_module_intake_1.md
+suo init
+suo next
+suo submit
+suo approve
+suo reject
+suo inspect
+suo check
 ```
 
-An external agent begins realization against that exact revision:
+### Initialize
 
 ```bash
-node dist/cli.js realization start handoff:module:intake:1 \
-  --id realization:intake \
-  --agent external-agent
+suo init "I have an idea for a calmer way to define products" --title "Example"
 ```
 
-It later submits closure evidence:
+### Read exactly one next action
 
 ```bash
-node dist/cli.js closure submit realization:intake \
-  --id closure:intake \
-  --file examples/closure-intake.json
-
-node dist/cli.js closure accept closure:intake --verifier owner
+suo next
+suo next --json
 ```
 
-`iloop next` then recomputes the decision frontier from the accepted reality.
+### Stage a proposal
 
-## Command surface
-
-```text
-iloop init | next | status | validate | generate
-iloop module create | update | connect | disconnect | freeze | delete | retire
-iloop decision propose | approve | defer | reopen
-iloop realization start
-iloop closure submit | accept | reject | reopen
+```bash
+suo submit examples/proposal-intake.json
 ```
 
-Run `iloop --help` for exact syntax.
+Submitting never changes Product authority. It creates a pending proposal and makes review the next action.
 
-## Files
+After the owner sees the exact change and explicitly approves:
+
+```bash
+suo approve proposal:intake --yes
+```
+
+Reject instead:
+
+```bash
+suo reject proposal:intake --reason "The scope is still too broad"
+```
+
+### Submit implementation closure
+
+```bash
+suo submit examples/closure-intake.json
+suo approve closure:intake --yes --verifier owner
+```
+
+The kernel refuses closure with stale handoffs, incomplete acceptance evidence, failed checks, unresolved Product deviations, or new Product questions.
+
+### Inspect and check
+
+```bash
+suo inspect
+suo inspect handoff:module:intake:1 --json
+suo check
+```
+
+Every write automatically validates state, regenerates artifacts, propagates staleness, and recomputes the next action. There are no public `generate`, `module`, `decision`, or graph-edge command trees.
+
+## Workspace
 
 ```text
-.intent-loop/
-├── intent-loop.json                 canonical Product authority and realization state
+.suo/
+├── suo.json                       canonical Product and realization state
 └── generated/
     ├── NEXT.json
     ├── NEXT.md
@@ -165,22 +128,41 @@ Run `iloop --help` for exact syntax.
     └── CLOSURES/
 ```
 
-## Third-party boundaries
+Generated files are projections. `.suo/suo.json` is the sole structured authority.
 
-- **Graphology / graphology-dag:** in-memory graph algorithms only.
-- **JSON Schema 2020-12 / Ajv:** persisted and tool-facing contract validation.
-- **Mermaid:** generated read-only projection.
-- **UPG:** planned optional import/export adapter; not the authority runtime.
-- **OpenSpec:** planned optional handoff export.
-- **Taskmaster and coding agents:** downstream consumers only.
+## Deterministic boundaries
 
-No graph database, vector store, workflow engine, event sourcing, hosted control plane, or model-provider dependency is required.
+The kernel owns:
+
+- JSON Schema and domain validation;
+- module definition DAG and cycle rejection;
+- proposal staging and stale-base detection;
+- explicit owner approval;
+- deterministic frontier selection;
+- versioned handoffs;
+- closure evidence validation;
+- downstream stale propagation;
+- atomic filesystem persistence.
+
+The host Agent owns natural-language understanding, research, recommendations, and dialogue. It cannot silently promote its own inference into Product authority.
 
 ## Development
 
+Requires Node.js 22.18+ and pnpm.
+
 ```bash
+pnpm install
 pnpm check
+node dist/cli.js --help
 ```
+
+## Third-party boundaries
+
+- Graphology / graphology-dag: in-memory graph algorithms only.
+- JSON Schema 2020-12 / Ajv: persisted contract validation.
+- Mermaid: generated projection.
+- UPG and OpenSpec: future optional adapters, never authority.
+- Coding agents: downstream handoff consumers and closure submitters.
 
 ## License
 
