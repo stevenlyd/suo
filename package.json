@@ -1,6 +1,6 @@
 {
   "name": "intent-loop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Close the loop from product intent to verified reality.",
   "type": "module",
   "private": true,
@@ -16,7 +16,7 @@
   },
   "pi": { "skills": ["./skills"] },
   "dependencies": {
-    "ajv": "8.17.1",
+    "ajv": "8.20.0",
     "graphology": "0.26.0",
     "graphology-dag": "0.4.1"
   },

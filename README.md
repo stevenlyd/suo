@@ -58,11 +58,18 @@ The package is not yet published to npm. Install the public GitHub repository di
 
 ```bash
 npm install --global \
-  https://github.com/stevenlyd/intent-loop/archive/refs/tags/v0.1.0.tar.gz
+  https://github.com/stevenlyd/intent-loop/archive/refs/tags/v0.1.1.tar.gz
 iloop --help
 ```
 
 The release archive is used deliberately: npm 11 with `install-links=false` can leave Git-based global installs pointing at a deleted temporary clone.
+
+If npm's configured global prefix is not on `PATH`, install into the conventional user prefix instead:
+
+```bash
+npm install --prefix "$HOME/.local" --global \
+  https://github.com/stevenlyd/intent-loop/archive/refs/tags/v0.1.1.tar.gz
+```
 
 ### Install the skill
 
@@ -78,7 +85,7 @@ Pi uses the repository as a native Pi package:
 pi install git:github.com/stevenlyd/intent-loop
 ```
 
-Codex and Pi can also share a user-global Agent Skills installation:
+Codex and Pi can share one user-global Agent Skills installation:
 
 ```bash
 npx --yes skills add stevenlyd/intent-loop --global \
