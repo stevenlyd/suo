@@ -1,6 +1,6 @@
 ---
 name: product-frontier
-description: "Use when turning an idea into one next Product decision. Maintains authority, handoff, and implementation closure."
+description: "Use when an idea needs one next Product decision."
 version: 0.1.0
 license: MIT
 metadata:
