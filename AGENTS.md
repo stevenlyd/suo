@@ -1,8 +1,8 @@
 # Agent instructions
 
-IntentLoop owns Product-definition and closure semantics, not software implementation planning.
+Suo owns Product-definition and closure semantics, not software implementation planning.
 
-- Keep `schemas/intent-loop.schema.json` the persisted cross-language contract.
+- Keep `schemas/suo.schema.json` the persisted cross-language contract.
 - Keep Product definition status separate from realization and closure status.
 - A full knowledge graph may be cyclic; only module definition dependencies must be a DAG.
 - Never let an external agent mark its own closure accepted.
