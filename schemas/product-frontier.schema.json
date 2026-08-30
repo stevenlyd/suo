@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://product-frontier.dev/schemas/product-frontier.schema.json",
+  "title": "Product Frontier Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "product", "modules", "decisions", "handoffs", "realizations", "closures"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "product": { "$ref": "#/$defs/product" },
+    "modules": { "type": "array", "items": { "$ref": "#/$defs/module" } },
+    "decisions": { "type": "array", "items": { "$ref": "#/$defs/decision" } },
+    "handoffs": { "type": "array", "items": { "$ref": "#/$defs/handoff" } },
+    "realizations": { "type": "array", "items": { "$ref": "#/$defs/realization" } },
+    "closures": { "type": "array", "items": { "$ref": "#/$defs/closure" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "nonEmpty": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "product": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "initialIdea", "activeSlice", "profile", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "title": { "$ref": "#/$defs/nonEmpty" }, "initialIdea": { "$ref": "#/$defs/nonEmpty" },
+        "activeSlice": { "$ref": "#/$defs/nonEmpty" }, "profile": { "$ref": "#/$defs/nonEmpty" },
+        "createdAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "acceptance": {
+      "type": "object", "additionalProperties": false, "required": ["id", "text"],
+      "properties": { "id": { "$ref": "#/$defs/id" }, "text": { "$ref": "#/$defs/nonEmpty" } }
+    },
+    "contract": {
+      "type": "object", "additionalProperties": false,
+      "required": ["objective", "frozenBehavior", "scope", "nonGoals", "acceptance"],
+      "properties": {
+        "objective": { "type": "string" },
+        "frozenBehavior": { "type": "array", "items": { "type": "string" } },
+        "scope": { "type": "array", "items": { "type": "string" } },
+        "nonGoals": { "type": "array", "items": { "type": "string" } },
+        "acceptance": { "type": "array", "items": { "$ref": "#/$defs/acceptance" } }
+      }
+    },
+    "module": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "phase", "definitionStatus", "dependencies", "contract", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "title": { "$ref": "#/$defs/nonEmpty" }, "phase": { "$ref": "#/$defs/nonEmpty" },
+        "definitionStatus": { "enum": ["candidate", "shaping", "frozen", "deferred", "superseded", "retired"] },
+        "dependencies": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "contract": { "$ref": "#/$defs/contract" }, "createdAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "alternative": {
+      "type": "object", "additionalProperties": false, "required": ["id", "label"],
+      "properties": { "id": { "$ref": "#/$defs/id" }, "label": { "$ref": "#/$defs/nonEmpty" }, "tradeoffs": { "type": "string" } }
+    },
+    "decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "moduleId", "question", "status", "alternatives", "prerequisites", "evidenceRefs", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "moduleId": { "$ref": "#/$defs/id" }, "question": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "enum": ["open", "proposed", "approved", "deferred", "superseded"] },
+        "alternatives": { "type": "array", "items": { "$ref": "#/$defs/alternative" } },
+        "recommendation": { "type": "string" }, "ownerChoice": { "type": "string" }, "rationale": { "type": "string" },
+        "prerequisites": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "evidenceRefs": { "type": "array", "items": { "type": "string" } }, "supersedes": { "$ref": "#/$defs/id" },
+        "createdAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "handoff": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "moduleId", "revision", "productRevision", "status", "decisionIds", "contractDigest", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "moduleId": { "$ref": "#/$defs/id" }, "revision": { "type": "integer", "minimum": 1 },
+        "productRevision": { "type": "integer", "minimum": 0 }, "status": { "enum": ["current", "in_delivery", "stale", "closed"] },
+        "decisionIds": { "type": "array", "items": { "$ref": "#/$defs/id" } }, "contractDigest": { "$ref": "#/$defs/nonEmpty" },
+        "createdAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "implementationRef": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "uri"],
+      "properties": { "kind": { "enum": ["commit", "pull_request", "file", "release", "deployment"] }, "uri": { "$ref": "#/$defs/nonEmpty" }, "revision": { "type": "string" } }
+    },
+    "realization": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "moduleId", "handoffId", "handoffRevision", "status", "implementationRefs", "startedAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "moduleId": { "$ref": "#/$defs/id" }, "handoffId": { "$ref": "#/$defs/id" },
+        "handoffRevision": { "type": "integer", "minimum": 1 }, "status": { "enum": ["in_progress", "closure_submitted", "closed", "reopened"] },
+        "agent": { "type": "string" }, "implementationRefs": { "type": "array", "items": { "$ref": "#/$defs/implementationRef" } },
+        "closureId": { "$ref": "#/$defs/id" }, "startedAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "acceptanceEvidence": {
+      "type": "object", "additionalProperties": false, "required": ["acceptanceId", "evidence", "result"],
+      "properties": { "acceptanceId": { "$ref": "#/$defs/id" }, "evidence": { "type": "array", "items": { "type": "string" } }, "result": { "enum": ["pass", "partial", "not_met"] } }
+    },
+    "deviation": {
+      "type": "object", "additionalProperties": false, "required": ["description", "consequence", "requiresProductDecision"],
+      "properties": { "description": { "$ref": "#/$defs/nonEmpty" }, "consequence": { "type": "string" }, "requiresProductDecision": { "type": "boolean" } }
+    },
+    "check": {
+      "type": "object", "additionalProperties": false, "required": ["result"],
+      "properties": { "command": { "type": "string" }, "system": { "type": "string" }, "result": { "enum": ["pass", "fail", "not_run"] }, "evidenceRef": { "type": "string" } }
+    },
+    "deployment": {
+      "type": "object", "additionalProperties": false, "required": ["environment", "revision", "evidenceRef"],
+      "properties": { "environment": { "$ref": "#/$defs/nonEmpty" }, "revision": { "$ref": "#/$defs/nonEmpty" }, "evidenceRef": { "$ref": "#/$defs/nonEmpty" } }
+    },
+    "closure": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "realizationId", "handoffId", "handoffRevision", "status", "implementationRefs", "deliveredBehavior", "acceptanceEvidence", "checks", "deviations", "residualRisks", "newProductQuestions", "submittedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "realizationId": { "$ref": "#/$defs/id" }, "handoffId": { "$ref": "#/$defs/id" },
+        "handoffRevision": { "type": "integer", "minimum": 1 }, "status": { "enum": ["submitted", "accepted", "rejected"] },
+        "implementationRefs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/implementationRef" } },
+        "deliveredBehavior": { "type": "array", "items": { "type": "string" } },
+        "acceptanceEvidence": { "type": "array", "items": { "$ref": "#/$defs/acceptanceEvidence" } },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } }, "deviations": { "type": "array", "items": { "$ref": "#/$defs/deviation" } },
+        "residualRisks": { "type": "array", "items": { "type": "string" } }, "newProductQuestions": { "type": "array", "items": { "type": "string" } },
+        "deployment": { "$ref": "#/$defs/deployment" }, "migrations": { "type": "array", "items": { "type": "string" } }, "cleanup": { "type": "array", "items": { "type": "string" } },
+        "submittedAt": { "$ref": "#/$defs/timestamp" }, "decidedAt": { "$ref": "#/$defs/timestamp" }, "verifier": { "type": "string" }, "rejectionReason": { "type": "string" }
+      }
+    }
+  }
+}

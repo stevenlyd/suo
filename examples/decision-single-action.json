@@ -1,0 +1,12 @@
+{
+  "id": "decision:single-action",
+  "moduleId": "module:intake",
+  "question": "What is the default unit of interaction after idea intake?",
+  "alternatives": [
+    { "id": "one-action", "label": "Exactly one bounded Product action" },
+    { "id": "backlog", "label": "A full list of unresolved Product questions" }
+  ],
+  "recommendation": "Exactly one bounded Product action",
+  "prerequisites": [],
+  "evidenceRefs": []
+}

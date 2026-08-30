@@ -1,0 +1,19 @@
+{
+  "implementationRefs": [
+    { "kind": "commit", "uri": "https://example.test/repository/commit/abc123", "revision": "abc123" }
+  ],
+  "deliveredBehavior": [
+    "The exact idea is stored in product.pf.json.",
+    "The CLI returns one structured NextProductAction."
+  ],
+  "acceptanceEvidence": [
+    { "acceptanceId": "intake-preserves-idea", "evidence": ["test: idea round-trip passed"], "result": "pass" },
+    { "acceptanceId": "intake-next-action", "evidence": ["test: single next action passed"], "result": "pass" }
+  ],
+  "checks": [
+    { "command": "pnpm check", "result": "pass", "evidenceRef": "local run" }
+  ],
+  "deviations": [],
+  "residualRisks": [],
+  "newProductQuestions": []
+}

@@ -1,0 +1,246 @@
+#!/usr/bin/env node
+import { readFile } from 'node:fs/promises'
+import {
+  acceptClosure,
+  approveDecision,
+  connectModules,
+  createModule,
+  createProduct,
+  deferDecision,
+  deleteDraftDecision,
+  deleteDraftModule,
+  disconnectModules,
+  freezeModule,
+  generateArtifacts,
+  loadSnapshot,
+  nextAction,
+  proposeDecision,
+  rejectClosure,
+  reopenClosure,
+  reopenDecision,
+  retireModule,
+  saveSnapshot,
+  startRealization,
+  submitClosure,
+  updateDecisionProposal,
+  updateModule,
+  validateSnapshot,
+} from './index.js'
+import type { ClosureSubmission, Decision, ModuleContract, ProductFrontierSnapshot } from './model.js'
+
+const argv = process.argv.slice(2)
+const command = argv.shift()
+
+try {
+  switch (command) {
+    case 'init': {
+      const productId = flag('--id')
+      const activeSlice = flag('--slice')
+      const profile = flag('--profile')
+      const snapshot = createProduct({
+        title: requiredFlag('--title'), idea: requiredFlag('--idea'),
+        ...(productId ? { id: productId } : {}),
+        ...(activeSlice ? { activeSlice } : {}),
+        ...(profile ? { profile } : {}),
+      })
+      await saveSnapshot(snapshot)
+      await generateArtifacts(snapshot)
+      print({ workspace: '.product-frontier', revision: snapshot.revision, next: nextAction(snapshot) })
+      break
+    }
+    case 'next': {
+      const snapshot = await loadSnapshot()
+      print(nextAction(snapshot), argv.includes('--json'))
+      break
+    }
+    case 'status': {
+      const snapshot = await loadSnapshot()
+      print({ revision: snapshot.revision, product: snapshot.product, modules: snapshot.modules.map(value => ({ id: value.id, definitionStatus: value.definitionStatus })), handoffs: snapshot.handoffs.map(value => ({ id: value.id, status: value.status })), realizations: snapshot.realizations.map(value => ({ id: value.id, status: value.status })), next: nextAction(snapshot) })
+      break
+    }
+    case 'validate': {
+      const snapshot = await loadSnapshot()
+      const issues = validateSnapshot(snapshot)
+      if (issues.length) throw new Error(issues.join('\n'))
+      print({ valid: true, revision: snapshot.revision })
+      break
+    }
+    case 'generate': {
+      const snapshot = await loadSnapshot()
+      print({ generated: await generateArtifacts(snapshot), revision: snapshot.revision })
+      break
+    }
+    case 'module': await moduleCommand(); break
+    case 'decision': await decisionCommand(); break
+    case 'realization': await realizationCommand(); break
+    case 'closure': await closureCommand(); break
+    case 'help':
+    case '--help':
+    case '-h':
+    case undefined:
+      console.log(helpText())
+      break
+    default: throw new Error(`unknown command: ${command}`)
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error))
+  process.exitCode = 1
+}
+
+async function moduleCommand(): Promise<void> {
+  const action = argv.shift()
+  switch (action) {
+    case 'create': {
+      const moduleId = requiredArg('module id')
+      const phase = flag('--phase')
+      await mutate(snapshot => createModule(snapshot, { id: moduleId, title: requiredFlag('--title'), ...(phase ? { phase } : {}) }))
+      break
+    }
+    case 'update': {
+      const moduleId = requiredArg('module id')
+      const patch = await readJson<{ title?: string; phase?: string; contract?: ModuleContract }>(requiredFlag('--file'))
+      await mutate(snapshot => updateModule(snapshot, moduleId, patch))
+      break
+    }
+    case 'delete': await mutate(snapshot => deleteDraftModule(snapshot, requiredArg('module id'))); break
+    case 'retire': await mutate(snapshot => retireModule(snapshot, requiredArg('module id'))); break
+    case 'connect': {
+      const moduleId = requiredArg('module id')
+      const dependencyId = requiredArg('dependency id')
+      await mutate(snapshot => connectModules(snapshot, moduleId, dependencyId))
+      break
+    }
+    case 'disconnect': {
+      const moduleId = requiredArg('module id')
+      const dependencyId = requiredArg('dependency id')
+      await mutate(snapshot => disconnectModules(snapshot, moduleId, dependencyId))
+      break
+    }
+    case 'freeze': await mutate(snapshot => freezeModule(snapshot, requiredArg('module id'))); break
+    default: throw new Error(`unknown module command: ${String(action)}`)
+  }
+}
+
+async function decisionCommand(): Promise<void> {
+  const action = argv.shift()
+  switch (action) {
+    case 'propose': {
+      const input = await readJson<Omit<Decision, 'status' | 'ownerChoice' | 'rationale' | 'createdAt' | 'updatedAt'> & { status?: 'open' | 'proposed' }>(requiredFlag('--file'))
+      await mutate(snapshot => proposeDecision(snapshot, input))
+      break
+    }
+    case 'update': {
+      const decisionId = requiredArg('decision id')
+      const patch = await readJson<Partial<Pick<Decision, 'question' | 'alternatives' | 'recommendation' | 'prerequisites' | 'evidenceRefs'>>>(requiredFlag('--file'))
+      await mutate(snapshot => updateDecisionProposal(snapshot, decisionId, patch))
+      break
+    }
+    case 'delete': await mutate(snapshot => deleteDraftDecision(snapshot, requiredArg('decision id'))); break
+    case 'approve': {
+      const decisionId = requiredArg('decision id')
+      await mutate(snapshot => approveDecision(snapshot, decisionId, { choice: requiredFlag('--choice'), rationale: requiredFlag('--rationale') }))
+      break
+    }
+    case 'defer': {
+      const decisionId = requiredArg('decision id')
+      await mutate(snapshot => deferDecision(snapshot, decisionId, requiredFlag('--rationale')))
+      break
+    }
+    case 'reopen': {
+      const decisionId = requiredArg('decision id')
+      const successorId = flag('--id')
+      await mutate(snapshot => reopenDecision(snapshot, decisionId, successorId ? { id: successorId } : {}))
+      break
+    }
+    default: throw new Error(`unknown decision command: ${String(action)}`)
+  }
+}
+
+async function realizationCommand(): Promise<void> {
+  const action = argv.shift()
+  if (action !== 'start') throw new Error(`unknown realization command: ${String(action)}`)
+  const handoffId = requiredArg('handoff id')
+  const realizationId = flag('--id')
+  const agent = flag('--agent')
+  await mutate(snapshot => startRealization(snapshot, handoffId, { ...(realizationId ? { id: realizationId } : {}), ...(agent ? { agent } : {}) }))
+}
+
+async function closureCommand(): Promise<void> {
+  const action = argv.shift()
+  switch (action) {
+    case 'submit': {
+      const realizationId = requiredArg('realization id')
+      const submission = await readJson<ClosureSubmission>(requiredFlag('--file'))
+      const closureId = flag('--id')
+      await mutate(snapshot => submitClosure(snapshot, realizationId, submission, closureId ? { id: closureId } : {}))
+      break
+    }
+    case 'accept': {
+      const closureId = requiredArg('closure id')
+      await mutate(snapshot => acceptClosure(snapshot, closureId, requiredFlag('--verifier')))
+      break
+    }
+    case 'reject': {
+      const closureId = requiredArg('closure id')
+      await mutate(snapshot => rejectClosure(snapshot, closureId, requiredFlag('--verifier'), requiredFlag('--reason')))
+      break
+    }
+    case 'reopen': {
+      const realizationId = requiredArg('realization id')
+      const decisionId = flag('--decision-id')
+      await mutate(snapshot => reopenClosure(snapshot, realizationId, requiredFlag('--reason'), decisionId ? { id: decisionId } : {}))
+      break
+    }
+    default: throw new Error(`unknown closure command: ${String(action)}`)
+  }
+}
+
+async function mutate(operation: (snapshot: ProductFrontierSnapshot) => ProductFrontierSnapshot): Promise<void> {
+  const current = await loadSnapshot()
+  const next = operation(current)
+  if (next.revision !== current.revision) await saveSnapshot(next)
+  await generateArtifacts(next)
+  print({ revision: next.revision, next: nextAction(next) })
+}
+
+function flag(name: string): string | undefined {
+  const index = argv.indexOf(name)
+  if (index < 0) return undefined
+  const value = argv[index + 1]
+  if (!value || value.startsWith('--')) throw new Error(`missing value for ${name}`)
+  argv.splice(index, 2)
+  return value
+}
+function requiredFlag(name: string): string { const value = flag(name); if (!value) throw new Error(`missing ${name}`); return value }
+function requiredArg(label: string): string { const value = argv.shift(); if (!value || value.startsWith('--')) throw new Error(`missing ${label}`); return value }
+async function readJson<T>(path: string): Promise<T> { return JSON.parse(await readFile(path, 'utf8')) as T }
+function print(value: unknown, compact = false): void { console.log(JSON.stringify(value, null, compact ? 0 : 2)) }
+
+function helpText(): string { return `Product Frontier
+
+Usage:
+  pf init --title <title> --idea <idea> [--id <id>] [--slice mvp]
+  pf next [--json]
+  pf status | validate | generate
+
+  pf module create <id> --title <title> [--phase mvp]
+  pf module update <id> --file <module-patch.json>
+  pf module connect <module-id> <dependency-id>
+  pf module disconnect <module-id> <dependency-id>
+  pf module freeze <id>
+  pf module delete <id>
+  pf module retire <id>
+
+  pf decision propose --file <decision.json>
+  pf decision update <id> --file <patch.json>
+  pf decision delete <id>
+  pf decision approve <id> --choice <choice> --rationale <rationale>
+  pf decision defer <id> --rationale <rationale>
+  pf decision reopen <id> [--id <successor-id>]
+
+  pf realization start <handoff-id> [--id <id>] [--agent <agent>]
+  pf closure submit <realization-id> --file <closure.json> [--id <id>]
+  pf closure accept <closure-id> --verifier <name>
+  pf closure reject <closure-id> --verifier <name> --reason <reason>
+  pf closure reopen <realization-id> --reason <reason>
+` }
