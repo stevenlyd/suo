@@ -4,17 +4,19 @@
   "description": "Close the loop from product intent to verified reality.",
   "type": "module",
   "private": true,
+  "keywords": ["pi-package", "agent-skills", "product-discovery", "decision-frontier"],
   "bin": { "intentloop": "./dist/cli.js", "iloop": "./dist/cli.js" },
   "files": ["dist", "schemas", "skills", "README.md", "LICENSE"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "prepack": "npm run build"
   },
+  "pi": { "skills": ["./skills"] },
   "dependencies": {
     "ajv": "8.17.1",
-
     "graphology": "0.26.0",
     "graphology-dag": "0.4.1"
   },

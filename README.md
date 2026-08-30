@@ -52,6 +52,40 @@ The canonical state is a single revisioned file at `.intent-loop/intent-loop.jso
 
 Requires Node.js 22.18+ and pnpm.
 
+### Install the CLI
+
+The package is not yet published to npm. Install the public GitHub repository directly:
+
+```bash
+npm install --global github:stevenlyd/intent-loop
+iloop --help
+```
+
+### Install the skill
+
+Hermes:
+
+```bash
+hermes skills install stevenlyd/intent-loop/skills/intent-loop --yes
+```
+
+Pi uses the repository as a native Pi package:
+
+```bash
+pi install git:github.com/stevenlyd/intent-loop
+```
+
+Codex and Pi can also share a user-global Agent Skills installation:
+
+```bash
+npx --yes skills add stevenlyd/intent-loop --global \
+  --agent codex pi --skill intent-loop --yes
+```
+
+The CLI is host-independent and only needs to be installed once. Each agent host still needs to discover the skill through its own registry or a shared `~/.agents/skills` installation.
+
+### Run locally from source
+
 ```bash
 pnpm install
 pnpm build

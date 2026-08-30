@@ -3,14 +3,27 @@ name: intent-loop
 description: "Use when an idea needs the IntentLoop product loop."
 version: 0.1.0
 license: MIT
+compatibility: "Requires Node.js 22.18+ and the iloop CLI."
 metadata:
   hermes:
     tags: [product-discovery, product-graph, decision-frontier, closure]
+prerequisites:
+  commands: [iloop]
 ---
 
 # IntentLoop
 
 Use IntentLoop to move from a vague idea to exactly one bounded Product action, then maintain the loop through an external agent handoff and evidence-backed closure.
+
+## Setup
+
+Install the CLI once from the public GitHub repository:
+
+```bash
+npm install --global github:stevenlyd/intent-loop
+```
+
+Confirm `iloop --help` works before using this skill.
 
 ## Operating invariant
 
