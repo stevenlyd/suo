@@ -1,6 +1,6 @@
 ---
-name: product-frontier
-description: "Use when an idea needs one next Product decision."
+name: intent-loop
+description: "Use when an idea needs the IntentLoop product loop."
 version: 0.1.0
 license: MIT
 metadata:
@@ -8,9 +8,9 @@ metadata:
     tags: [product-discovery, product-graph, decision-frontier, closure]
 ---
 
-# Product Frontier
+# IntentLoop
 
-Use Product Frontier to move from a vague idea to exactly one bounded Product action, then maintain the loop through an external agent handoff and evidence-backed closure.
+Use IntentLoop to move from a vague idea to exactly one bounded Product action, then maintain the loop through an external agent handoff and evidence-backed closure.
 
 ## Operating invariant
 
@@ -27,16 +27,16 @@ The default user-facing result is exactly one `NextProductAction`. The internal 
 
 ## Workflow
 
-1. In a repository workspace, run `pf status`; if absent, initialize from the user's exact idea with `pf init`.
-2. Read `pf next --json` before asking a question.
+1. In a repository workspace, run `iloop status`; if absent, initialize from the user's exact idea with `iloop init`.
+2. Read `iloop next --json` before asking a question.
 3. If the gap is a retrievable fact, research it instead of asking the owner.
 4. Ask only the bounded owner choice represented by the current action. Include a recommendation, why now, and what it unlocks.
 5. Convert the answer into a decision proposal. Show the exact proposed change before approval.
-6. Call `pf decision approve` only after explicit approval.
+6. Call `iloop decision approve` only after explicit approval.
 7. Complete the module contract without selecting implementation details. Freeze it only when behavior, scope, non-goals, and observable acceptance are complete.
 8. Give the external implementation agent the exact generated handoff revision.
-9. On return, require `pf closure submit` with implementation references, acceptance evidence, real check results, deviations, risks, and new Product questions.
-10. Accept closure only after verifying the evidence and reconciling every Product deviation. Then run `pf next --json` again.
+9. On return, require `iloop closure submit` with implementation references, acceptance evidence, real check results, deviations, risks, and new Product questions.
+10. Accept closure only after verifying the evidence and reconciling every Product deviation. Then run `iloop next --json` again.
 
 ## Closure handling
 

@@ -3,7 +3,7 @@
     { "kind": "commit", "uri": "https://example.test/repository/commit/abc123", "revision": "abc123" }
   ],
   "deliveredBehavior": [
-    "The exact idea is stored in product.pf.json.",
+    "The exact idea is stored in intent-loop.json.",
     "The CLI returns one structured NextProductAction."
   ],
   "acceptanceEvidence": [

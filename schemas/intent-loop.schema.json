@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://product-frontier.dev/schemas/product-frontier.schema.json",
-  "title": "Product Frontier Snapshot",
+  "$id": "urn:intentloop:schema:snapshot:v1",
+  "title": "IntentLoop Snapshot",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "revision", "product", "modules", "decisions", "handoffs", "realizations", "closures"],

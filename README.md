@@ -1,8 +1,8 @@
-# Product Frontier
+# IntentLoop
 
 **A graph underneath, one product decision at a time.**
 
-Product Frontier starts with “I have an idea,” builds a durable Product definition graph, exposes exactly one bounded next Product action, compiles frozen modules into agent-ready handoffs, and accepts evidence-backed closure from external implementation agents.
+IntentLoop starts with “I have an idea,” builds a durable Product definition graph, exposes exactly one bounded next Product action, compiles frozen modules into agent-ready handoffs, and accepts evidence-backed closure from external implementation agents.
 
 It deliberately stops short of planning or executing software development.
 
@@ -28,7 +28,7 @@ idea
 - Agents propose; owners approve Product authority.
 - External agents submit closure claims; verifiers accept closure.
 - Approved history is superseded or retired, not silently deleted.
-- Generated Markdown and Mermaid are projections of `product.pf.json`.
+- Generated Markdown and Mermaid are projections of `intent-loop.json`.
 
 ## Current vertical slice
 
@@ -46,7 +46,7 @@ The repository contains a working local-first kernel and CLI for:
 - JSON Schema and domain invariant validation;
 - generated `NEXT.md`, Product map, Mermaid DAG, handoffs, and closures.
 
-The canonical state is a single revisioned file at `.product-frontier/product.pf.json`. Git is optional history and distribution, not a domain lifecycle.
+The canonical state is a single revisioned file at `.intent-loop/intent-loop.json`. Git is optional history and distribution, not a domain lifecycle.
 
 ## Quick start
 
@@ -72,7 +72,7 @@ node dist/cli.js next
 The freeze creates a handoff such as:
 
 ```text
-.product-frontier/generated/HANDOFFS/handoff_module_intake_1.md
+.intent-loop/generated/HANDOFFS/handoff_module_intake_1.md
 ```
 
 An external agent begins realization against that exact revision:
@@ -93,25 +93,25 @@ node dist/cli.js closure submit realization:intake \
 node dist/cli.js closure accept closure:intake --verifier owner
 ```
 
-`pf next` then recomputes the Product frontier from the accepted reality.
+`iloop next` then recomputes the decision frontier from the accepted reality.
 
 ## Command surface
 
 ```text
-pf init | next | status | validate | generate
-pf module create | update | connect | disconnect | freeze | delete | retire
-pf decision propose | approve | defer | reopen
-pf realization start
-pf closure submit | accept | reject | reopen
+iloop init | next | status | validate | generate
+iloop module create | update | connect | disconnect | freeze | delete | retire
+iloop decision propose | approve | defer | reopen
+iloop realization start
+iloop closure submit | accept | reject | reopen
 ```
 
-Run `pf --help` for exact syntax.
+Run `iloop --help` for exact syntax.
 
 ## Files
 
 ```text
-.product-frontier/
-├── product.pf.json                 canonical Product authority and realization state
+.intent-loop/
+├── intent-loop.json                 canonical Product authority and realization state
 └── generated/
     ├── NEXT.json
     ├── NEXT.md

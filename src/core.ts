@@ -8,7 +8,7 @@ import type {
   Handoff,
   ModuleContract,
   NextProductAction,
-  ProductFrontierSnapshot,
+  IntentLoopSnapshot,
   ProductModule,
   Realization,
 } from './model.js'
@@ -17,14 +17,14 @@ export interface MutationOptions { now?: string; id?: string }
 
 const now = (value?: string) => value ?? new Date().toISOString()
 const id = (prefix: string, value?: string) => value ?? `${prefix}:${randomUUID()}`
-const copy = (snapshot: ProductFrontierSnapshot): ProductFrontierSnapshot => structuredClone(snapshot)
-const commit = (snapshot: ProductFrontierSnapshot, timestamp: string): ProductFrontierSnapshot => {
+const copy = (snapshot: IntentLoopSnapshot): IntentLoopSnapshot => structuredClone(snapshot)
+const commit = (snapshot: IntentLoopSnapshot, timestamp: string): IntentLoopSnapshot => {
   snapshot.revision += 1
   snapshot.product.updatedAt = timestamp
   return snapshot
 }
 
-export function createProduct(input: { id?: string; title: string; idea: string; activeSlice?: string; profile?: string }, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function createProduct(input: { id?: string; title: string; idea: string; activeSlice?: string; profile?: string }, options: MutationOptions = {}): IntentLoopSnapshot {
   const timestamp = now(options.now)
   if (!input.title.trim() || !input.idea.trim()) throw new Error('title and idea are required')
   return {
@@ -45,7 +45,7 @@ export function createProduct(input: { id?: string; title: string; idea: string;
 
 const emptyContract = (): ModuleContract => ({ objective: '', frozenBehavior: [], scope: [], nonGoals: [], acceptance: [] })
 
-export function createModule(snapshot: ProductFrontierSnapshot, input: { id: string; title: string; phase?: string; contract?: ModuleContract }, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function createModule(snapshot: IntentLoopSnapshot, input: { id: string; title: string; phase?: string; contract?: ModuleContract }, options: MutationOptions = {}): IntentLoopSnapshot {
   if (snapshot.modules.some(value => value.id === input.id)) throw new Error(`module already exists: ${input.id}`)
   const timestamp = now(options.now)
   const next = copy(snapshot)
@@ -62,7 +62,7 @@ export function createModule(snapshot: ProductFrontierSnapshot, input: { id: str
   return commit(next, timestamp)
 }
 
-export function updateModule(snapshot: ProductFrontierSnapshot, moduleId: string, patch: { title?: string; phase?: string; contract?: ModuleContract }, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function updateModule(snapshot: IntentLoopSnapshot, moduleId: string, patch: { title?: string; phase?: string; contract?: ModuleContract }, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const module = requireModule(next, moduleId)
   if (['superseded', 'retired'].includes(module.definitionStatus)) throw new Error(`cannot update ${module.definitionStatus} module: ${moduleId}`)
@@ -75,7 +75,7 @@ export function updateModule(snapshot: ProductFrontierSnapshot, moduleId: string
   return commit(next, module.updatedAt)
 }
 
-export function deleteDraftModule(snapshot: ProductFrontierSnapshot, moduleId: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function deleteDraftModule(snapshot: IntentLoopSnapshot, moduleId: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const module = requireModule(snapshot, moduleId)
   if (!['candidate', 'shaping'].includes(module.definitionStatus)) throw new Error('only candidate or shaping modules can be deleted')
   if (snapshot.modules.some(value => value.dependencies.includes(moduleId))) throw new Error('cannot delete a referenced module')
@@ -85,7 +85,7 @@ export function deleteDraftModule(snapshot: ProductFrontierSnapshot, moduleId: s
   return commit(next, now(options.now))
 }
 
-export function retireModule(snapshot: ProductFrontierSnapshot, moduleId: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function retireModule(snapshot: IntentLoopSnapshot, moduleId: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const module = requireModule(next, moduleId)
   module.definitionStatus = 'retired'
@@ -94,7 +94,7 @@ export function retireModule(snapshot: ProductFrontierSnapshot, moduleId: string
   return commit(next, module.updatedAt)
 }
 
-export function connectModules(snapshot: ProductFrontierSnapshot, moduleId: string, dependencyId: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function connectModules(snapshot: IntentLoopSnapshot, moduleId: string, dependencyId: string, options: MutationOptions = {}): IntentLoopSnapshot {
   if (moduleId === dependencyId) throw new Error('a module cannot depend on itself')
   const next = copy(snapshot)
   const module = requireModule(next, moduleId)
@@ -111,7 +111,7 @@ export function connectModules(snapshot: ProductFrontierSnapshot, moduleId: stri
   return commit(next, module.updatedAt)
 }
 
-export function disconnectModules(snapshot: ProductFrontierSnapshot, moduleId: string, dependencyId: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function disconnectModules(snapshot: IntentLoopSnapshot, moduleId: string, dependencyId: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const module = requireModule(next, moduleId)
   if (!module.dependencies.includes(dependencyId)) return snapshot
@@ -122,7 +122,7 @@ export function disconnectModules(snapshot: ProductFrontierSnapshot, moduleId: s
   return commit(next, module.updatedAt)
 }
 
-export function proposeDecision(snapshot: ProductFrontierSnapshot, input: Omit<Decision, 'status' | 'ownerChoice' | 'rationale' | 'createdAt' | 'updatedAt'> & { status?: 'open' | 'proposed' }, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function proposeDecision(snapshot: IntentLoopSnapshot, input: Omit<Decision, 'status' | 'ownerChoice' | 'rationale' | 'createdAt' | 'updatedAt'> & { status?: 'open' | 'proposed' }, options: MutationOptions = {}): IntentLoopSnapshot {
   requireModule(snapshot, input.moduleId)
   if (snapshot.decisions.some(value => value.id === input.id)) throw new Error(`decision already exists: ${input.id}`)
   for (const prerequisite of input.prerequisites) requireDecision(snapshot, prerequisite)
@@ -134,7 +134,7 @@ export function proposeDecision(snapshot: ProductFrontierSnapshot, input: Omit<D
   return commit(next, timestamp)
 }
 
-export function updateDecisionProposal(snapshot: ProductFrontierSnapshot, decisionId: string, patch: Partial<Pick<Decision, 'question' | 'alternatives' | 'recommendation' | 'prerequisites' | 'evidenceRefs'>>, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function updateDecisionProposal(snapshot: IntentLoopSnapshot, decisionId: string, patch: Partial<Pick<Decision, 'question' | 'alternatives' | 'recommendation' | 'prerequisites' | 'evidenceRefs'>>, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const decision = requireDecision(next, decisionId)
   if (!['open', 'proposed'].includes(decision.status)) throw new Error('only an open proposal can be updated')
@@ -150,7 +150,7 @@ export function updateDecisionProposal(snapshot: ProductFrontierSnapshot, decisi
   return commit(next, timestamp)
 }
 
-export function deleteDraftDecision(snapshot: ProductFrontierSnapshot, decisionId: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function deleteDraftDecision(snapshot: IntentLoopSnapshot, decisionId: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const decision = requireDecision(snapshot, decisionId)
   if (!['open', 'proposed'].includes(decision.status)) throw new Error('only an open proposal can be deleted')
   if (snapshot.decisions.some(value => value.prerequisites.includes(decisionId))) throw new Error('cannot delete a referenced decision')
@@ -159,7 +159,7 @@ export function deleteDraftDecision(snapshot: ProductFrontierSnapshot, decisionI
   return commit(next, now(options.now))
 }
 
-export function approveDecision(snapshot: ProductFrontierSnapshot, decisionId: string, input: { choice: string; rationale: string; evidenceRefs?: string[] }, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function approveDecision(snapshot: IntentLoopSnapshot, decisionId: string, input: { choice: string; rationale: string; evidenceRefs?: string[] }, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const decision = requireDecision(next, decisionId)
   if (!['open', 'proposed'].includes(decision.status)) throw new Error(`cannot approve ${decision.status} decision`)
@@ -177,7 +177,7 @@ export function approveDecision(snapshot: ProductFrontierSnapshot, decisionId: s
   return commit(next, timestamp)
 }
 
-export function deferDecision(snapshot: ProductFrontierSnapshot, decisionId: string, rationale: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function deferDecision(snapshot: IntentLoopSnapshot, decisionId: string, rationale: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const decision = requireDecision(next, decisionId)
   if (!['open', 'proposed'].includes(decision.status)) throw new Error(`cannot defer ${decision.status} decision`)
@@ -189,7 +189,7 @@ export function deferDecision(snapshot: ProductFrontierSnapshot, decisionId: str
   return commit(next, timestamp)
 }
 
-export function reopenDecision(snapshot: ProductFrontierSnapshot, decisionId: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function reopenDecision(snapshot: IntentLoopSnapshot, decisionId: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const decision = requireDecision(next, decisionId)
   if (!['approved', 'deferred'].includes(decision.status)) throw new Error(`cannot reopen ${decision.status} decision`)
@@ -218,7 +218,7 @@ export function reopenDecision(snapshot: ProductFrontierSnapshot, decisionId: st
   return commit(next, timestamp)
 }
 
-export function freezeModule(snapshot: ProductFrontierSnapshot, moduleId: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function freezeModule(snapshot: IntentLoopSnapshot, moduleId: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const module = requireModule(next, moduleId)
   for (const dependency of module.dependencies) {
@@ -236,7 +236,7 @@ export function freezeModule(snapshot: ProductFrontierSnapshot, moduleId: string
   return commit(next, timestamp)
 }
 
-export function startRealization(snapshot: ProductFrontierSnapshot, handoffId: string, input: { id?: string; agent?: string }, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function startRealization(snapshot: IntentLoopSnapshot, handoffId: string, input: { id?: string; agent?: string }, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const handoff = requireHandoff(next, handoffId)
   if (handoff.status !== 'current') throw new Error(`handoff is not current: ${handoff.status}`)
@@ -252,7 +252,7 @@ export function startRealization(snapshot: ProductFrontierSnapshot, handoffId: s
   return commit(next, timestamp)
 }
 
-export function submitClosure(snapshot: ProductFrontierSnapshot, realizationId: string, submission: ClosureSubmission, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function submitClosure(snapshot: IntentLoopSnapshot, realizationId: string, submission: ClosureSubmission, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const realization = requireRealization(next, realizationId)
   if (!['in_progress', 'reopened'].includes(realization.status)) throw new Error(`cannot submit closure for ${realization.status} realization`)
@@ -272,7 +272,7 @@ export function submitClosure(snapshot: ProductFrontierSnapshot, realizationId: 
   return commit(next, timestamp)
 }
 
-export function acceptClosure(snapshot: ProductFrontierSnapshot, closureId: string, verifier: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function acceptClosure(snapshot: IntentLoopSnapshot, closureId: string, verifier: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const closure = requireClosure(next, closureId)
   if (closure.status !== 'submitted') throw new Error(`closure is ${closure.status}`)
@@ -297,7 +297,7 @@ export function acceptClosure(snapshot: ProductFrontierSnapshot, closureId: stri
   return commit(next, timestamp)
 }
 
-export function rejectClosure(snapshot: ProductFrontierSnapshot, closureId: string, verifier: string, reason: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function rejectClosure(snapshot: IntentLoopSnapshot, closureId: string, verifier: string, reason: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const closure = requireClosure(next, closureId)
   if (closure.status !== 'submitted') throw new Error(`closure is ${closure.status}`)
@@ -312,7 +312,7 @@ export function rejectClosure(snapshot: ProductFrontierSnapshot, closureId: stri
   return commit(next, timestamp)
 }
 
-export function reopenClosure(snapshot: ProductFrontierSnapshot, realizationId: string, reason: string, options: MutationOptions = {}): ProductFrontierSnapshot {
+export function reopenClosure(snapshot: IntentLoopSnapshot, realizationId: string, reason: string, options: MutationOptions = {}): IntentLoopSnapshot {
   const next = copy(snapshot)
   const realization = requireRealization(next, realizationId)
   if (realization.status !== 'closed') throw new Error('only a closed realization can be reopened')
@@ -330,7 +330,7 @@ export function reopenClosure(snapshot: ProductFrontierSnapshot, realizationId: 
   return commit(next, timestamp)
 }
 
-export function nextAction(snapshot: ProductFrontierSnapshot): NextProductAction {
+export function nextAction(snapshot: IntentLoopSnapshot): NextProductAction {
   const submitted = snapshot.closures.find(value => value.status === 'submitted')
   if (submitted) {
     const realization = requireRealization(snapshot, submitted.realizationId)
@@ -364,7 +364,7 @@ export function nextAction(snapshot: ProductFrontierSnapshot): NextProductAction
   return { type: 'definition_complete', title: 'Current product slice is complete', whyNow: 'No unresolved or deliverable module remains in the active graph.', expectedOutcome: 'Import new evidence, reopen a decision, or define the next product slice.' }
 }
 
-export function validateInvariants(snapshot: ProductFrontierSnapshot): string[] {
+export function validateInvariants(snapshot: IntentLoopSnapshot): string[] {
   const issues: string[] = []
   for (const [label, values] of [['module', snapshot.modules], ['decision', snapshot.decisions], ['handoff', snapshot.handoffs], ['realization', snapshot.realizations], ['closure', snapshot.closures]] as const) {
     const seen = new Set<string>()
@@ -383,11 +383,11 @@ export function validateInvariants(snapshot: ProductFrontierSnapshot): string[] 
   return issues
 }
 
-export function moduleTopologicalOrder(snapshot: ProductFrontierSnapshot): string[] {
+export function moduleTopologicalOrder(snapshot: IntentLoopSnapshot): string[] {
   return topologicalSort(moduleGraph(snapshot))
 }
 
-function moduleGraph(snapshot: ProductFrontierSnapshot, strict = true): DirectedGraph {
+function moduleGraph(snapshot: IntentLoopSnapshot, strict = true): DirectedGraph {
   const graph = new DirectedGraph()
   for (const module of snapshot.modules) graph.addNode(module.id)
   for (const module of snapshot.modules) for (const dependency of module.dependencies) {
@@ -397,7 +397,7 @@ function moduleGraph(snapshot: ProductFrontierSnapshot, strict = true): Directed
   return graph
 }
 
-function decisionGraph(snapshot: ProductFrontierSnapshot): DirectedGraph {
+function decisionGraph(snapshot: IntentLoopSnapshot): DirectedGraph {
   const graph = new DirectedGraph()
   for (const decision of snapshot.decisions) graph.addNode(decision.id)
   for (const decision of snapshot.decisions) for (const prerequisite of decision.prerequisites) if (graph.hasNode(prerequisite)) graph.addEdge(prerequisite, decision.id)
@@ -414,7 +414,7 @@ function contractGaps(contract: ModuleContract): string[] {
   return gaps
 }
 
-function createCurrentHandoff(snapshot: ProductFrontierSnapshot, module: ProductModule, timestamp: string): Handoff {
+function createCurrentHandoff(snapshot: IntentLoopSnapshot, module: ProductModule, timestamp: string): Handoff {
   for (const value of snapshot.handoffs.filter(value => value.moduleId === module.id && ['current', 'in_delivery'].includes(value.status))) value.status = 'stale'
   const revision = Math.max(0, ...snapshot.handoffs.filter(value => value.moduleId === module.id).map(value => value.revision)) + 1
   const handoff: Handoff = {
@@ -426,7 +426,7 @@ function createCurrentHandoff(snapshot: ProductFrontierSnapshot, module: Product
   return handoff
 }
 
-function invalidateModuleAndDownstream(snapshot: ProductFrontierSnapshot, moduleId: string): void {
+function invalidateModuleAndDownstream(snapshot: IntentLoopSnapshot, moduleId: string): void {
   for (const affected of [moduleId, ...downstream(snapshot, moduleId)]) {
     for (const handoff of snapshot.handoffs.filter(value => value.moduleId === affected && value.status !== 'closed')) handoff.status = 'stale'
     const module = requireModule(snapshot, affected)
@@ -434,7 +434,7 @@ function invalidateModuleAndDownstream(snapshot: ProductFrontierSnapshot, module
   }
 }
 
-function downstream(snapshot: ProductFrontierSnapshot, moduleId: string): string[] {
+function downstream(snapshot: IntentLoopSnapshot, moduleId: string): string[] {
   const result = new Set<string>()
   const queue = [moduleId]
   while (queue.length) {
@@ -444,9 +444,9 @@ function downstream(snapshot: ProductFrontierSnapshot, moduleId: string): string
   return [...result].sort()
 }
 
-function unlockCount(snapshot: ProductFrontierSnapshot, moduleId: string): number { return downstream(snapshot, moduleId).length }
-function requireModule(snapshot: ProductFrontierSnapshot, moduleId: string): ProductModule { const value = snapshot.modules.find(item => item.id === moduleId); if (!value) throw new Error(`unknown module: ${moduleId}`); return value }
-function requireDecision(snapshot: ProductFrontierSnapshot, decisionId: string): Decision { const value = snapshot.decisions.find(item => item.id === decisionId); if (!value) throw new Error(`unknown decision: ${decisionId}`); return value }
-function requireHandoff(snapshot: ProductFrontierSnapshot, handoffId: string): Handoff { const value = snapshot.handoffs.find(item => item.id === handoffId); if (!value) throw new Error(`unknown handoff: ${handoffId}`); return value }
-function requireRealization(snapshot: ProductFrontierSnapshot, realizationId: string): Realization { const value = snapshot.realizations.find(item => item.id === realizationId); if (!value) throw new Error(`unknown realization: ${realizationId}`); return value }
-function requireClosure(snapshot: ProductFrontierSnapshot, closureId: string): Closure { const value = snapshot.closures.find(item => item.id === closureId); if (!value) throw new Error(`unknown closure: ${closureId}`); return value }
+function unlockCount(snapshot: IntentLoopSnapshot, moduleId: string): number { return downstream(snapshot, moduleId).length }
+function requireModule(snapshot: IntentLoopSnapshot, moduleId: string): ProductModule { const value = snapshot.modules.find(item => item.id === moduleId); if (!value) throw new Error(`unknown module: ${moduleId}`); return value }
+function requireDecision(snapshot: IntentLoopSnapshot, decisionId: string): Decision { const value = snapshot.decisions.find(item => item.id === decisionId); if (!value) throw new Error(`unknown decision: ${decisionId}`); return value }
+function requireHandoff(snapshot: IntentLoopSnapshot, handoffId: string): Handoff { const value = snapshot.handoffs.find(item => item.id === handoffId); if (!value) throw new Error(`unknown handoff: ${handoffId}`); return value }
+function requireRealization(snapshot: IntentLoopSnapshot, realizationId: string): Realization { const value = snapshot.realizations.find(item => item.id === realizationId); if (!value) throw new Error(`unknown realization: ${realizationId}`); return value }
+function requireClosure(snapshot: IntentLoopSnapshot, closureId: string): Closure { const value = snapshot.closures.find(item => item.id === closureId); if (!value) throw new Error(`unknown closure: ${closureId}`); return value }

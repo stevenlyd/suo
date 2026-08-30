@@ -1,8 +1,8 @@
 # Agent instructions
 
-Product Frontier owns Product-definition and closure semantics, not software implementation planning.
+IntentLoop owns Product-definition and closure semantics, not software implementation planning.
 
-- Keep `schemas/product-frontier.schema.json` the persisted cross-language contract.
+- Keep `schemas/intent-loop.schema.json` the persisted cross-language contract.
 - Keep Product definition status separate from realization and closure status.
 - A full knowledge graph may be cyclic; only module definition dependencies must be a DAG.
 - Never let an external agent mark its own closure accepted.

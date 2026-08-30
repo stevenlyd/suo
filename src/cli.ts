@@ -26,7 +26,7 @@ import {
   updateModule,
   validateSnapshot,
 } from './index.js'
-import type { ClosureSubmission, Decision, ModuleContract, ProductFrontierSnapshot } from './model.js'
+import type { ClosureSubmission, Decision, ModuleContract, IntentLoopSnapshot } from './model.js'
 
 const argv = process.argv.slice(2)
 const command = argv.shift()
@@ -45,7 +45,7 @@ try {
       })
       await saveSnapshot(snapshot)
       await generateArtifacts(snapshot)
-      print({ workspace: '.product-frontier', revision: snapshot.revision, next: nextAction(snapshot) })
+      print({ workspace: '.intent-loop', revision: snapshot.revision, next: nextAction(snapshot) })
       break
     }
     case 'next': {
@@ -195,7 +195,7 @@ async function closureCommand(): Promise<void> {
   }
 }
 
-async function mutate(operation: (snapshot: ProductFrontierSnapshot) => ProductFrontierSnapshot): Promise<void> {
+async function mutate(operation: (snapshot: IntentLoopSnapshot) => IntentLoopSnapshot): Promise<void> {
   const current = await loadSnapshot()
   const next = operation(current)
   if (next.revision !== current.revision) await saveSnapshot(next)
@@ -216,31 +216,31 @@ function requiredArg(label: string): string { const value = argv.shift(); if (!v
 async function readJson<T>(path: string): Promise<T> { return JSON.parse(await readFile(path, 'utf8')) as T }
 function print(value: unknown, compact = false): void { console.log(JSON.stringify(value, null, compact ? 0 : 2)) }
 
-function helpText(): string { return `Product Frontier
+function helpText(): string { return `IntentLoop
 
 Usage:
-  pf init --title <title> --idea <idea> [--id <id>] [--slice mvp]
-  pf next [--json]
-  pf status | validate | generate
+  iloop init --title <title> --idea <idea> [--id <id>] [--slice mvp]
+  iloop next [--json]
+  iloop status | validate | generate
 
-  pf module create <id> --title <title> [--phase mvp]
-  pf module update <id> --file <module-patch.json>
-  pf module connect <module-id> <dependency-id>
-  pf module disconnect <module-id> <dependency-id>
-  pf module freeze <id>
-  pf module delete <id>
-  pf module retire <id>
+  iloop module create <id> --title <title> [--phase mvp]
+  iloop module update <id> --file <module-patch.json>
+  iloop module connect <module-id> <dependency-id>
+  iloop module disconnect <module-id> <dependency-id>
+  iloop module freeze <id>
+  iloop module delete <id>
+  iloop module retire <id>
 
-  pf decision propose --file <decision.json>
-  pf decision update <id> --file <patch.json>
-  pf decision delete <id>
-  pf decision approve <id> --choice <choice> --rationale <rationale>
-  pf decision defer <id> --rationale <rationale>
-  pf decision reopen <id> [--id <successor-id>]
+  iloop decision propose --file <decision.json>
+  iloop decision update <id> --file <patch.json>
+  iloop decision delete <id>
+  iloop decision approve <id> --choice <choice> --rationale <rationale>
+  iloop decision defer <id> --rationale <rationale>
+  iloop decision reopen <id> [--id <successor-id>]
 
-  pf realization start <handoff-id> [--id <id>] [--agent <agent>]
-  pf closure submit <realization-id> --file <closure.json> [--id <id>]
-  pf closure accept <closure-id> --verifier <name>
-  pf closure reject <closure-id> --verifier <name> --reason <reason>
-  pf closure reopen <realization-id> --reason <reason>
+  iloop realization start <handoff-id> [--id <id>] [--agent <agent>]
+  iloop closure submit <realization-id> --file <closure.json> [--id <id>]
+  iloop closure accept <closure-id> --verifier <name>
+  iloop closure reject <closure-id> --verifier <name> --reason <reason>
+  iloop closure reopen <realization-id> --reason <reason>
 ` }

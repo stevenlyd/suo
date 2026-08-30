@@ -98,7 +98,7 @@ export interface Closure extends ClosureSubmission {
   verifier?: string
   rejectionReason?: string
 }
-export interface ProductFrontierSnapshot {
+export interface IntentLoopSnapshot {
   schemaVersion: 1
   revision: number
   product: { id: string; title: string; initialIdea: string; activeSlice: string; profile: string; createdAt: string; updatedAt: string }

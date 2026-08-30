@@ -1,25 +1,25 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { ProductFrontierSnapshot } from './model.js'
+import type { IntentLoopSnapshot } from './model.js'
 import { assertValidSnapshot } from './validation.js'
 
-export const workspaceDir = (root = process.cwd()) => join(root, '.product-frontier')
-export const snapshotPath = (root = process.cwd()) => join(workspaceDir(root), 'product.pf.json')
+export const workspaceDir = (root = process.cwd()) => join(root, '.intent-loop')
+export const snapshotPath = (root = process.cwd()) => join(workspaceDir(root), 'intent-loop.json')
 
-export async function loadSnapshot(root = process.cwd()): Promise<ProductFrontierSnapshot> {
+export async function loadSnapshot(root = process.cwd()): Promise<IntentLoopSnapshot> {
   const raw = JSON.parse(await readFile(snapshotPath(root), 'utf8')) as unknown
   assertValidSnapshot(raw)
   return raw
 }
 
-export async function saveSnapshot(snapshot: ProductFrontierSnapshot, root = process.cwd()): Promise<void> {
+export async function saveSnapshot(snapshot: IntentLoopSnapshot, root = process.cwd()): Promise<void> {
   assertValidSnapshot(snapshot)
   const target = snapshotPath(root)
   await mkdir(dirname(target), { recursive: true })
   try {
     const current = JSON.parse(await readFile(target, 'utf8')) as { revision?: unknown }
     const expected = snapshot.revision - 1
-    if (current.revision !== expected) throw new Error(`stale Product Frontier revision: expected ${String(current.revision)} -> ${expected}`)
+    if (current.revision !== expected) throw new Error(`stale IntentLoop revision: expected ${String(current.revision)} -> ${expected}`)
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     if (code !== 'ENOENT') throw error

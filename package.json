@@ -1,10 +1,10 @@
 {
-  "name": "product-frontier",
+  "name": "intent-loop",
   "version": "0.1.0",
-  "description": "A graph underneath, one product decision at a time.",
+  "description": "Close the loop from product intent to verified reality.",
   "type": "module",
   "private": true,
-  "bin": { "product-frontier": "./dist/cli.js", "pf": "./dist/cli.js" },
+  "bin": { "intentloop": "./dist/cli.js", "iloop": "./dist/cli.js" },
   "files": ["dist", "schemas", "skills", "README.md", "LICENSE"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

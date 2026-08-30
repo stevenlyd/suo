@@ -15,7 +15,7 @@ import {
   updateModule,
   validateInvariants,
 } from '../src/core.js'
-import type { ClosureSubmission, ModuleContract, ProductFrontierSnapshot } from '../src/model.js'
+import type { ClosureSubmission, ModuleContract, IntentLoopSnapshot } from '../src/model.js'
 import { validateSnapshot } from '../src/validation.js'
 
 const time = '2026-08-30T00:00:00.000Z'
@@ -27,11 +27,11 @@ const contract = (prefix: string): ModuleContract => ({
   acceptance: [{ id: `${prefix}-acceptance`, text: `${prefix} works` }],
 })
 
-function product(): ProductFrontierSnapshot {
+function product(): IntentLoopSnapshot {
   return createProduct({ id: 'product:test', title: 'Test product', idea: 'I have an idea' }, { now: time })
 }
 
-function frozenModule(): ProductFrontierSnapshot {
+function frozenModule(): IntentLoopSnapshot {
   let snapshot = product()
   snapshot = createModule(snapshot, { id: 'module:a', title: 'Module A', contract: contract('a') }, { now: time })
   snapshot = proposeDecision(snapshot, {
@@ -50,7 +50,7 @@ const closure = (): ClosureSubmission => ({
   deviations: [], residualRisks: [], newProductQuestions: [],
 })
 
-describe('Product Frontier', () => {
+describe('IntentLoop', () => {
   it('turns an idea into exactly one next action', () => {
     const snapshot = product()
     expect(nextAction(snapshot)).toMatchObject({ type: 'clarify_idea' })
