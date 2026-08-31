@@ -1,12 +1,26 @@
 {
   "name": "@stevenlyd/suo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A shuttle for thought: one decision at a time, into form.",
   "type": "module",
   "private": true,
-  "keywords": ["pi-package", "agent-skills", "product-discovery", "decision-frontier", "suo"],
-  "bin": { "suo": "./dist/cli.js" },
-  "files": ["dist", "schemas", "skills", "README.md", "LICENSE"],
+  "keywords": [
+    "pi-package",
+    "agent-skills",
+    "product-discovery",
+    "decision-frontier",
+    "suo"
+  ],
+  "bin": {
+    "suo": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -14,18 +28,25 @@
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "prepack": "npm run build"
   },
-  "pi": { "skills": ["./skills"] },
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
   "dependencies": {
     "ajv": "8.20.0",
+    "esbuild": "0.25.9",
     "graphology": "0.26.0",
-    "graphology-dag": "0.4.1"
+    "graphology-dag": "0.4.1",
+    "typescript": "5.9.2"
   },
   "devDependencies": {
     "@types/node": "24.3.0",
-    "typescript": "5.9.2",
     "vitest": "3.2.4"
   },
-  "engines": { "node": ">=22.18.0" },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "packageManager": "pnpm@10.28.1",
   "license": "MIT"
 }

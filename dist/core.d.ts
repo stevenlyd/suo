@@ -1,4 +1,4 @@
-import type { ClosureEnvelope, ClosureSubmission, Decision, ModuleContract, NextProductAction, ProposalSubmission, SuoSnapshot } from './model.js';
+import type { ClosureEnvelope, ClosureSubmission, Decision, ModuleContract, NextProductAction, ProposalSubmission, Prose, SuoSnapshot } from './model.js';
 export interface MutationOptions {
     now?: string;
     id?: string;
@@ -40,7 +40,7 @@ export declare function reopenDecision(snapshot: SuoSnapshot, decisionId: string
 export declare function freezeModule(snapshot: SuoSnapshot, moduleId: string, options?: MutationOptions): SuoSnapshot;
 export declare function startRealization(snapshot: SuoSnapshot, handoffId: string, input: {
     id?: string;
-    agent?: string;
+    agent: string;
 }, options?: MutationOptions): SuoSnapshot;
 export declare function submitClosure(snapshot: SuoSnapshot, realizationId: string, submission: ClosureSubmission, options?: MutationOptions): SuoSnapshot;
 export declare function acceptClosure(snapshot: SuoSnapshot, closureId: string, verifier: string, options?: MutationOptions): SuoSnapshot;
@@ -53,3 +53,5 @@ export declare function submitClosureEnvelope(snapshot: SuoSnapshot, envelope: C
 export declare function nextAction(snapshot: SuoSnapshot): NextProductAction;
 export declare function validateInvariants(snapshot: SuoSnapshot): string[];
 export declare function moduleTopologicalOrder(snapshot: SuoSnapshot): string[];
+export declare function proseText(value: Prose): string;
+export declare function reconcileImportedAuthority(snapshot: SuoSnapshot): SuoSnapshot;

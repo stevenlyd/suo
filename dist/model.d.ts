@@ -4,12 +4,19 @@ export type HandoffStatus = 'current' | 'in_delivery' | 'stale' | 'closed';
 export type RealizationStatus = 'in_progress' | 'closure_submitted' | 'closed' | 'reopened';
 export type ClosureStatus = 'submitted' | 'accepted' | 'rejected';
 export type ProposalStatus = 'pending' | 'approved' | 'rejected';
+export interface MarkdownDocument {
+    readonly kind: 'markdown';
+    readonly path: string;
+    readonly content: string;
+    readonly digest: string;
+}
+export type Prose = string | MarkdownDocument;
 export interface AcceptanceCriterion {
     id: string;
     text: string;
 }
 export interface ModuleContract {
-    objective: string;
+    objective: Prose;
     frozenBehavior: string[];
     scope: string[];
     nonGoals: string[];
@@ -66,7 +73,7 @@ export interface Realization {
     handoffId: string;
     handoffRevision: number;
     status: RealizationStatus;
-    agent?: string;
+    agent: string;
     implementationRefs: ImplementationRef[];
     closureId?: string;
     startedAt: string;
@@ -208,7 +215,7 @@ export interface ClosureEnvelope {
     id?: string;
     handoffId: string;
     realizationId?: string;
-    agent?: string;
+    agent: string;
     submission: ClosureSubmission;
 }
 export type SubmissionEnvelope = ProposalSubmission | ClosureEnvelope;

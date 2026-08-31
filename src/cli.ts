@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import {
   acceptClosure,
   approveProposal,
   createProduct,
+  findProjectRoot,
   generateArtifacts,
   loadSnapshot,
   nextAction,
@@ -43,9 +45,15 @@ try {
 }
 
 async function initCommand(): Promise<void> {
-  const positionalIdea = argv.find(value => !value.startsWith('--'))
-  const idea = flag('--idea') ?? positionalIdea
-  if (!idea?.trim()) throw new Error('usage: suo init "I have an idea..." [--title <title>]')
+  const flaggedIdea = flag('--idea')
+  const explicitRoot = flag('--root')
+  const positionals = positionalArgs(argv)
+  const requestedRoot = explicitRoot ?? (flaggedIdea && positionals[0] ? positionals[0] : undefined)
+  const root = requestedRoot ? resolve(requestedRoot) : await findProjectRoot('.', true)
+  const idea = flaggedIdea ?? positionals[0]
+  if (!idea?.trim()) throw new Error('usage: suo init [project-directory] --idea "I have an idea..." [--title <title>]')
+  await mkdir(root, { recursive: true })
+  if (await pathExists(resolve(root, 'suo', 'product.suo.ts'))) throw new Error(`Suo is already initialized at ${root}`)
   const title = flag('--title')?.trim() || idea.trim().split(/\s+/).slice(0, 8).join(' ')
   const productId = flag('--id')
   const activeSlice = flag('--slice')
@@ -57,9 +65,10 @@ async function initCommand(): Promise<void> {
     ...(activeSlice ? { activeSlice } : {}),
     ...(profile ? { profile } : {}),
   })
-  await saveSnapshot(snapshot)
-  await generateArtifacts(snapshot)
-  print({ workspace: '.suo', revision: snapshot.revision, next: nextAction(snapshot) })
+  await saveSnapshot(snapshot, root, { initialize: true })
+  await ensureSuoIgnored(root)
+  await generateArtifacts(snapshot, root)
+  print({ root, authority: 'suo/product.suo.ts', documents: 'docs/suo', revision: snapshot.revision, next: nextAction(snapshot) })
 }
 
 async function nextCommand(): Promise<void> {
@@ -79,10 +88,13 @@ async function submitCommand(): Promise<void> {
 async function approveCommand(): Promise<void> {
   const targetId = requiredArg('proposal or closure id')
   if (!hasFlag('--yes')) throw new Error('approval requires --yes after explicit owner or verifier approval')
-  const verifier = flag('--verifier') ?? 'owner'
+  const verifier = flag('--verifier')
   await mutate(snapshot => {
     if (snapshot.proposals.some(value => value.id === targetId)) return approveProposal(snapshot, targetId)
-    if (snapshot.closures.some(value => value.id === targetId)) return acceptClosure(snapshot, targetId, verifier)
+    if (snapshot.closures.some(value => value.id === targetId)) {
+      if (!verifier) throw new Error('closure approval requires --verifier <identity>')
+      return acceptClosure(snapshot, targetId, verifier)
+    }
     throw new Error(`unknown proposal or closure: ${targetId}`)
   })
 }
@@ -90,10 +102,13 @@ async function approveCommand(): Promise<void> {
 async function rejectCommand(): Promise<void> {
   const targetId = requiredArg('proposal or closure id')
   const reason = requiredFlag('--reason')
-  const verifier = flag('--verifier') ?? 'owner'
+  const verifier = flag('--verifier')
   await mutate(snapshot => {
     if (snapshot.proposals.some(value => value.id === targetId)) return rejectProposal(snapshot, targetId, reason)
-    if (snapshot.closures.some(value => value.id === targetId)) return rejectClosure(snapshot, targetId, verifier, reason)
+    if (snapshot.closures.some(value => value.id === targetId)) {
+      if (!verifier) throw new Error('closure rejection requires --verifier <identity>')
+      return rejectClosure(snapshot, targetId, verifier, reason)
+    }
     throw new Error(`unknown proposal or closure: ${targetId}`)
   })
 }
@@ -129,7 +144,7 @@ async function checkCommand(): Promise<void> {
 async function mutate(operation: (snapshot: SuoSnapshot) => SuoSnapshot): Promise<void> {
   const current = await loadSnapshot()
   const next = operation(current)
-  if (next.revision !== current.revision) await saveSnapshot(next)
+  await saveSnapshot(next)
   await generateArtifacts(next)
   print({ revision: next.revision, next: nextAction(next) })
 }
@@ -152,6 +167,16 @@ function flag(name: string): string | undefined {
   return value
 }
 function hasFlag(name: string): boolean { return argv.includes(name) }
+function positionalArgs(values: string[]): string[] {
+  const valued = new Set(['--idea', '--root', '--title', '--id', '--slice', '--profile', '--reason', '--verifier'])
+  const output: string[] = []
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index]!
+    if (valued.has(value)) { index += 1; continue }
+    if (!value.startsWith('--')) output.push(value)
+  }
+  return output
+}
 function requiredFlag(name: string): string { const value = flag(name); if (!value) throw new Error(`missing ${name}`); return value }
 function requiredArg(label: string): string { const value = argv.shift(); if (!value || value.startsWith('--')) throw new Error(`missing ${label}`); return value }
 async function readSubmission(path: string): Promise<SubmissionEnvelope> {
@@ -166,17 +191,27 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf8')
 }
 function print(value: unknown, compact = false): void { console.log(JSON.stringify(value, null, compact ? 0 : 2)) }
+async function pathExists(path: string): Promise<boolean> { try { await access(path); return true } catch { return false } }
+async function ensureSuoIgnored(root: string): Promise<void> {
+  const path = resolve(root, '.gitignore')
+  const current = await pathExists(path) ? await readFile(path, 'utf8') : ''
+  if (current.split(/\r?\n/).includes('.suo/')) return
+  const prefix = current.length && !current.endsWith('\n') ? `${current}\n` : current
+  await writeFile(path, `${prefix}.suo/\n`, 'utf8')
+}
 
 function helpText(): string { return `Suo 梭 — A shuttle for thought.
 
 Human interaction happens through the Suo Agent Skill. This CLI is the deterministic local protocol used by agents and CI.
 
 Usage:
-  suo init "I have an idea..." [--title <title>]
+  suo init [project-directory] --idea "I have an idea..." [--title <title>]
   suo next [--json]
   suo submit <submission.json|->
-  suo approve <proposal-or-closure-id> --yes [--verifier <name>]
-  suo reject <proposal-or-closure-id> --reason <reason> [--verifier <name>]
+  suo approve <proposal-id> --yes
+  suo approve <closure-id> --yes --verifier <identity>
+  suo reject <proposal-id> --reason <reason>
+  suo reject <closure-id> --reason <reason> --verifier <identity>
   suo inspect [record-id] [--json]
   suo check
 ` }

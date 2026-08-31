@@ -2,35 +2,24 @@
 
 **A shuttle for thought.**
 
-Suo helps a person think in one line while a multidimensional Product model takes form underneath.
+Suo lets a person think in one conversational thread while a multidimensional Product model takes form underneath.
 
 > Your idea is the work. Suo is only the shuttle.
 
 ## Start with a sentence
 
-People do not operate Suo by writing JSON or memorizing graph commands. Use it through a compatible Agent Skill and say:
+People use Suo through a compatible Agent Skill:
 
 > I have an idea…
 
-The agent reads the current frontier, asks one bounded question, recommends an answer, shows the exact proposed change, and waits for explicit approval. Suo's deterministic kernel validates and commits the result.
+The agent reads the current frontier, asks one bounded question, recommends an answer, shows the exact proposed change, and waits for explicit owner approval.
 
 ```text
 Human
   → Hermes / Codex / Pi + Suo Skill
   → suo CLI
-  → .suo/suo.json
+  → imported TypeScript ontology + Markdown resources
 ```
-
-## The weaving model
-
-- **Warp** — frozen dependencies, constraints, and Product structure.
-- **Shed** — the one opening currently allowed by the dependency frontier.
-- **Weft** — one bounded Product decision.
-- **Pick** — one proposal, approval, and authority commit.
-- **Shuttle** — the agent carries a decision out as a handoff and returns with closure evidence.
-- **Fabric** — the evolving Product authority.
-
-The public domain model keeps plain names such as `Decision`, `Handoff`, and `Closure`; the weaving language explains the interaction without making the API cryptic.
 
 ## The loop
 
@@ -39,18 +28,95 @@ The public domain model keeps plain names such as `Decision`, `Handoff`, and `Cl
 → exactly one NextProductAction
 → agent proposal
 → explicit owner approval
+→ TypeScript authority commit
 → frozen handoff
 → external implementation
-→ closure submission
+→ evidence-backed closure
 → verifier approval
 → exactly one next action
 ```
 
-Product-definition status and implementation reality remain separate. An external agent may submit evidence but cannot accept its own closure.
+Product definition and implementation reality are separate. An external agent can submit evidence but cannot accept its own closure.
 
-## CLI: local protocol for agents and CI
+## Project layout
 
-Humans may use `next`, `inspect`, and `check` for visibility. Structured writes are intended for Agent Skills.
+```text
+<project>/
+├── suo/                          Product authority
+│   ├── product.suo.ts            imported authority root
+│   ├── ontology.d.ts             generated compiler contract
+│   ├── assets.d.ts               generated Markdown module contract
+│   ├── modules/*.suo.ts
+│   ├── decisions/*.suo.ts
+│   ├── handoffs/*.suo.ts
+│   ├── realizations/*.suo.ts
+│   ├── closures/*.suo.ts
+│   ├── proposals/*.suo.ts
+│   ├── resources/*.suo.ts
+│   └── content/*.md
+├── docs/suo/                     generated human-readable projections
+└── .suo/                         local cache and staged proposals
+```
+
+There is no authoritative JSON snapshot. `suo/**/*.suo.ts` and imported Markdown are the authority. `.suo/` contains transient machine state and should normally be ignored by Git. `docs/suo/` can always be regenerated.
+
+## Import graph is the ontology graph
+
+Every persisted resource reference is a TypeScript import. String IDs and string paths are not accepted as graph edges.
+
+```ts
+import objective from "../content/client-gallery.md"
+import clientPortal from "./client-portal.suo.js"
+import type { ModuleNode } from "../ontology.js"
+
+const value = {
+  kind: "module",
+  id: "module:client-gallery",
+  title: "Private client gallery",
+  dependencies: [clientPortal],
+  contract: {
+    objective,
+    frozenBehavior: ["Only authorized clients can open the gallery."],
+    scope: ["Private gallery viewing"],
+    nonGoals: ["Public portfolio publishing"],
+    acceptance: [
+      { id: "authorized-access", text: "An authorized client can open the gallery." },
+    ],
+  },
+  phase: "mvp",
+  definitionStatus: "shaping",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+} satisfies ModuleNode
+
+export default value
+```
+
+Markdown imports are compiled into typed documents containing their repository-relative path, content, and SHA-256 digest. They may live under `suo/content/` or elsewhere inside the same project; Suo preserves the imported path across authority writes. Missing, moved, changed-during-commit, or out-of-project Markdown fails `suo check`.
+
+External URLs, commits, files, releases, deployments, and evidence are declared once as typed resource nodes. Other nodes import those resources rather than repeating string references.
+
+Suo source files are declarative. Executable code, dynamic imports, assertions, computed properties, and spread are rejected.
+
+## Initialize
+
+From zero, create the future repository root immediately:
+
+```bash
+suo init ./my-project --idea "I have an idea for a calmer way to define products"
+```
+
+Inside an existing Git repository:
+
+```bash
+suo init --idea "Add a private client gallery"
+```
+
+Suo finds the Git root. After initialization, every command walks upward to find `suo/product.suo.ts`, so commands work from nested source directories without creating another workspace.
+
+## CLI: protocol for agents and CI
+
+Humans normally interact through the Skill. The flat CLI remains available for agents, automation, inspection, and CI:
 
 ```text
 suo init
@@ -62,32 +128,21 @@ suo inspect
 suo check
 ```
 
-### Initialize
-
-```bash
-suo init "I have an idea for a calmer way to define products" --title "Example"
-```
-
-### Read exactly one next action
+### One next action
 
 ```bash
 suo next
 suo next --json
 ```
 
-### Stage a proposal
+### Stage and approve a proposal
 
 ```bash
 suo submit examples/proposal-intake.json
-```
-
-Submitting never changes Product authority. It creates a pending proposal and makes review the next action.
-
-After the owner sees the exact change and explicitly approves:
-
-```bash
 suo approve proposal:intake --yes
 ```
+
+Submission JSON is only a protocol envelope staged under `.suo/`; it is not Product authority. Approval checks the proposal base digest, applies the change to imported TypeScript/Markdown sources, checks the complete ontology, and regenerates `docs/suo/`.
 
 Reject instead:
 
@@ -102,7 +157,9 @@ suo submit examples/closure-intake.json
 suo approve closure:intake --yes --verifier owner
 ```
 
-The kernel refuses closure with stale handoffs, incomplete acceptance evidence, failed checks, unresolved Product deviations, or new Product questions.
+Every closure must name a non-empty implementation-agent identity. Suo normalizes surrounding whitespace and prevents that identity from approving or rejecting its own closure.
+
+The kernel rejects stale handoffs, incomplete acceptance evidence, failed checks, unresolved Product deviations, and new Product questions.
 
 ### Inspect and check
 
@@ -112,29 +169,15 @@ suo inspect handoff:module:intake:1 --json
 suo check
 ```
 
-Every write automatically validates state, regenerates artifacts, propagates staleness, and recomputes the next action. There are no public `generate`, `module`, `decision`, or graph-edge command trees.
-
-## Workspace
-
-```text
-.suo/
-├── suo.json                       canonical Product and realization state
-└── generated/
-    ├── NEXT.json
-    ├── NEXT.md
-    ├── PRODUCT_MAP.md
-    ├── PRODUCT_DAG.mmd
-    ├── HANDOFFS/
-    └── CLOSURES/
-```
-
-Generated files are projections. `.suo/suo.json` is the sole structured authority.
+`suo check` performs TypeScript compilation, import reachability, Markdown resolution and hashing, ID uniqueness, definition-DAG validation, lifecycle validation, closure validation, and generated-document reconciliation.
 
 ## Deterministic boundaries
 
 The kernel owns:
 
-- JSON Schema and domain validation;
+- declarative TypeScript ontology compilation;
+- mandatory imported resource references;
+- Markdown module loading and content digests;
 - module definition DAG and cycle rejection;
 - proposal staging and stale-base detection;
 - explicit owner approval;
@@ -142,9 +185,9 @@ The kernel owns:
 - versioned handoffs;
 - closure evidence validation;
 - downstream stale propagation;
-- atomic filesystem persistence.
+- checked filesystem commits.
 
-The host Agent owns natural-language understanding, research, recommendations, and dialogue. It cannot silently promote its own inference into Product authority.
+The host Agent owns natural-language understanding, research, recommendations, and dialogue. It cannot silently promote its inference into Product authority.
 
 ## Development
 
@@ -158,8 +201,10 @@ node dist/cli.js --help
 
 ## Third-party boundaries
 
-- Graphology / graphology-dag: in-memory graph algorithms only.
-- JSON Schema 2020-12 / Ajv: persisted contract validation.
+- TypeScript: node contracts and static checking.
+- esbuild: isolated compilation of the declarative import graph and Markdown modules.
+- Graphology / graphology-dag: in-memory graph algorithms.
+- JSON Schema / Ajv: runtime protocol and compiled-snapshot validation, never authority.
 - Mermaid: generated projection.
 - UPG and OpenSpec: future optional adapters, never authority.
 - Coding agents: downstream handoff consumers and closure submitters.

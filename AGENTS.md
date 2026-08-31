@@ -2,7 +2,9 @@
 
 Suo owns Product-definition and closure semantics, not software implementation planning.
 
-- Keep `schemas/suo.schema.json` the persisted cross-language contract.
+- Keep `suo/**/*.suo.ts` and their imported Markdown/resources as Product authority.
+- Keep `schemas/compiled-snapshot.schema.json` as runtime validation only; JSON is not authority.
+- Persist ontology edges as TypeScript imports, never string IDs or string paths.
 - Keep Product definition status separate from realization and closure status.
 - A full knowledge graph may be cyclic; only module definition dependencies must be a DAG.
 - Never let an external agent mark its own closure accepted.

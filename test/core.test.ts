@@ -10,6 +10,7 @@ import {
   freezeModule,
   nextAction,
   proposeDecision,
+  rejectClosure,
   reopenDecision,
   stageProposal,
   startRealization,
@@ -87,9 +88,13 @@ describe('Suo', () => {
     let snapshot = frozenModule()
     const handoff = snapshot.handoffs[0]!
     expect(handoff).toMatchObject({ id: 'handoff:module:a:1', revision: 1, status: 'current' })
-    snapshot = startRealization(snapshot, handoff.id, { id: 'realization:a', agent: 'external-agent' }, { now: time })
+    expect(() => startRealization(snapshot, handoff.id, { id: 'missing-agent' } as { id: string; agent: string }, { now: time })).toThrow('agent identity is required')
+    snapshot = startRealization(snapshot, handoff.id, { id: 'realization:a', agent: 'external-agent ' }, { now: time })
+    expect(snapshot.realizations[0]?.agent).toBe('external-agent')
     snapshot = submitClosure(snapshot, 'realization:a', closure(), { id: 'closure:a', now: time })
     expect(nextAction(snapshot)).toMatchObject({ type: 'review_closure', closureId: 'closure:a' })
+    expect(() => acceptClosure(snapshot, 'closure:a', 'external-agent', { now: time })).toThrow('cannot accept its own closure')
+    expect(() => rejectClosure(snapshot, 'closure:a', 'external-agent', 'retry', { now: time })).toThrow('cannot reject its own closure')
     snapshot = acceptClosure(snapshot, 'closure:a', 'owner', { now: time })
     expect(snapshot.realizations[0]?.status).toBe('closed')
     expect(snapshot.handoffs[0]?.status).toBe('closed')
@@ -97,7 +102,7 @@ describe('Suo', () => {
 
   it('refuses closure when acceptance, checks, or Product reconciliation is incomplete', () => {
     let snapshot = frozenModule()
-    snapshot = startRealization(snapshot, snapshot.handoffs[0]!.id, { id: 'realization:a' }, { now: time })
+    snapshot = startRealization(snapshot, snapshot.handoffs[0]!.id, { id: 'realization:a', agent: 'external-agent' }, { now: time })
     const bad = closure()
     bad.acceptanceEvidence[0]!.result = 'partial'
     bad.newProductQuestions.push('Should the behavior change?')

@@ -1,5 +1,5 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import schema from '../schemas/suo.schema.json' with { type: 'json' };
+import schema from '../schemas/compiled-snapshot.schema.json' with { type: 'json' };
 import { validateInvariants } from './core.js';
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 ajv.addFormat('date-time', { type: 'string', validate: value => !Number.isNaN(Date.parse(value)) });

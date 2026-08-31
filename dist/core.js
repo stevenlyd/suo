@@ -254,11 +254,14 @@ export function startRealization(snapshot, handoffId, input, options = {}) {
         throw new Error(`handoff is not current: ${handoff.status}`);
     if (next.realizations.some(value => value.handoffId === handoffId && ['in_progress', 'closure_submitted', 'reopened'].includes(value.status)))
         throw new Error('handoff already has an active realization');
+    const agent = input.agent?.trim();
+    if (!agent)
+        throw new Error('realization agent identity is required');
     const timestamp = now(options.now);
     const realization = {
         id: id('realization', input.id), moduleId: handoff.moduleId, handoffId: handoff.id, handoffRevision: handoff.revision,
         status: 'in_progress', implementationRefs: [], startedAt: timestamp, updatedAt: timestamp,
-        ...(input.agent ? { agent: input.agent } : {}),
+        agent,
     };
     next.realizations.push(realization);
     handoff.status = 'in_delivery';
@@ -292,6 +295,11 @@ export function acceptClosure(snapshot, closureId, verifier, options = {}) {
     if (closure.status !== 'submitted')
         throw new Error(`closure is ${closure.status}`);
     const realization = requireRealization(next, closure.realizationId);
+    const verifierIdentity = verifier.trim();
+    if (!verifierIdentity)
+        throw new Error('closure verifier is required');
+    if (realization.agent === verifierIdentity)
+        throw new Error('an implementation agent cannot accept its own closure');
     const handoff = requireHandoff(next, closure.handoffId);
     const module = requireModule(next, realization.moduleId);
     if (handoff.revision !== closure.handoffRevision || handoff.status === 'stale')
@@ -308,7 +316,7 @@ export function acceptClosure(snapshot, closureId, verifier, options = {}) {
         throw new Error('closure requires Product reconciliation');
     const timestamp = now(options.now);
     closure.status = 'accepted';
-    closure.verifier = verifier;
+    closure.verifier = verifierIdentity;
     closure.decidedAt = timestamp;
     realization.status = 'closed';
     realization.updatedAt = timestamp;
@@ -320,12 +328,20 @@ export function rejectClosure(snapshot, closureId, verifier, reason, options = {
     const closure = requireClosure(next, closureId);
     if (closure.status !== 'submitted')
         throw new Error(`closure is ${closure.status}`);
+    const realization = requireRealization(next, closure.realizationId);
+    const verifierIdentity = verifier.trim();
+    if (!verifierIdentity)
+        throw new Error('closure verifier is required');
+    if (realization.agent === verifierIdentity)
+        throw new Error('an implementation agent cannot reject its own closure');
+    const rejectionReason = reason.trim();
+    if (!rejectionReason)
+        throw new Error('closure rejection reason is required');
     const timestamp = now(options.now);
     closure.status = 'rejected';
-    closure.verifier = verifier;
-    closure.rejectionReason = reason.trim();
+    closure.verifier = verifierIdentity;
+    closure.rejectionReason = rejectionReason;
     closure.decidedAt = timestamp;
-    const realization = requireRealization(next, closure.realizationId);
     realization.status = 'reopened';
     realization.updatedAt = timestamp;
     return commit(next, timestamp);
@@ -367,7 +383,7 @@ export function stageProposal(snapshot, input, options = {}) {
         submittedAt: timestamp,
     };
     next.proposals.push(proposal);
-    return commit(next, timestamp);
+    return next;
 }
 export function approveProposal(snapshot, proposalId, options = {}) {
     const proposal = requireProposal(snapshot, proposalId);
@@ -412,10 +428,7 @@ export function submitClosureEnvelope(snapshot, envelope, options = {}) {
             realizationId = active.id;
         else {
             realizationId = id('realization');
-            next = startRealization(next, envelope.handoffId, {
-                id: realizationId,
-                ...(envelope.agent ? { agent: envelope.agent } : {}),
-            }, { now: timestamp });
+            next = startRealization(next, envelope.handoffId, { id: realizationId, agent: envelope.agent }, { now: timestamp });
         }
     }
     next = submitClosure(next, realizationId, envelope.submission, {
@@ -530,9 +543,29 @@ function decisionGraph(snapshot) {
                 graph.addEdge(prerequisite, decision.id);
     return graph;
 }
+export function proseText(value) {
+    return typeof value === 'string' ? value : value.content;
+}
+export function reconcileImportedAuthority(snapshot) {
+    const next = copy(snapshot);
+    const changedModules = new Set(next.handoffs
+        .filter(value => ['current', 'in_delivery'].includes(value.status))
+        .filter(value => value.contractDigest !== handoffDefinitionDigest(next, requireModule(next, value.moduleId)))
+        .map(value => value.moduleId));
+    for (const moduleId of changedModules) {
+        invalidateModuleAndDownstream(next, moduleId);
+        const module = requireModule(next, moduleId);
+        if (module.definitionStatus === 'frozen')
+            module.definitionStatus = 'shaping';
+    }
+    return next;
+}
+function proseDigestValue(value) {
+    return typeof value === 'string' ? value : { path: value.path, digest: value.digest };
+}
 function contractGaps(contract) {
     const gaps = [];
-    if (!contract.objective.trim())
+    if (!proseText(contract.objective).trim())
         gaps.push('objective');
     if (!contract.frozenBehavior.length)
         gaps.push('frozenBehavior');
@@ -551,7 +584,7 @@ function createCurrentHandoff(snapshot, module, timestamp) {
     const handoff = {
         id: `handoff:${module.id}:${revision}`, moduleId: module.id, revision, productRevision: snapshot.revision + 1, status: 'current',
         decisionIds: snapshot.decisions.filter(value => value.moduleId === module.id && ['approved', 'deferred'].includes(value.status)).map(value => value.id).sort(),
-        contractDigest: createHash('sha256').update(JSON.stringify(module.contract)).digest('hex'), createdAt: timestamp,
+        contractDigest: handoffDefinitionDigest(snapshot, module), createdAt: timestamp,
     };
     snapshot.handoffs.push(handoff);
     return handoff;
@@ -564,6 +597,17 @@ function invalidateModuleAndDownstream(snapshot, moduleId) {
         if (affected !== moduleId && module.definitionStatus === 'frozen')
             module.definitionStatus = 'shaping';
     }
+}
+function handoffDefinitionDigest(snapshot, module) {
+    const decisions = snapshot.decisions
+        .filter(value => value.moduleId === module.id && ['approved', 'deferred'].includes(value.status))
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map(value => ({ id: value.id, status: value.status, ownerChoice: value.ownerChoice, rationale: value.rationale, evidenceRefs: [...value.evidenceRefs].sort() }));
+    return createHash('sha256').update(JSON.stringify({
+        dependencies: [...module.dependencies].sort(),
+        contract: { ...module.contract, objective: proseDigestValue(module.contract.objective) },
+        decisions,
+    })).digest('hex');
 }
 function downstream(snapshot, moduleId) {
     const result = new Set();

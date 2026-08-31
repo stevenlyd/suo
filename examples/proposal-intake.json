@@ -15,7 +15,7 @@
           "scope": ["Single owner", "Single Product workspace"],
           "nonGoals": ["Software implementation planning", "Automatic development-agent dispatch"],
           "acceptance": [
-            { "id": "intake-stored", "text": "The exact idea is present in suo.json." },
+            { "id": "intake-stored", "text": "The exact idea is represented in the imported Suo authority." },
             { "id": "one-action", "text": "suo next --json returns exactly one action." }
           ]
         }

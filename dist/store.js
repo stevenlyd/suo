@@ -1,30 +1,146 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { findProjectRoot, loadAuthority, saveAuthority } from './source.js';
 import { assertValidSnapshot } from './validation.js';
-export const workspaceDir = (root = process.cwd()) => join(root, '.suo');
-export const snapshotPath = (root = process.cwd()) => join(workspaceDir(root), 'suo.json');
-export async function loadSnapshot(root = process.cwd()) {
-    const value = JSON.parse(await readFile(snapshotPath(root), 'utf8'));
-    assertValidSnapshot(value);
-    return value;
-}
-export async function saveSnapshot(snapshot, root = process.cwd()) {
+export const workspaceDir = (root) => join(root, '.suo');
+const stagedProposalPath = (root) => join(workspaceDir(root), 'staged', 'proposals.json');
+const writeLockPath = (root) => join(workspaceDir(root), 'write.lock');
+export async function loadSnapshot(start = process.cwd()) {
+    const root = await findProjectRoot(start);
+    const authority = await loadAuthority(root);
+    const authorityProposalIds = new Set(authority.proposals.map(value => value.id));
+    const staged = (await loadStagedProposals(root)).filter(value => !authorityProposalIds.has(value.id));
+    const snapshot = { ...authority, proposals: [...authority.proposals, ...staged] };
     assertValidSnapshot(snapshot);
-    const path = snapshotPath(root);
+    return snapshot;
+}
+export async function saveSnapshot(snapshot, start = process.cwd(), options = {}) {
+    assertValidSnapshot(snapshot);
+    const root = await findProjectRoot(start, options.initialize === true);
+    await withWriteLock(root, async () => {
+        const canonical = authorityProjection(snapshot);
+        const requestedPending = snapshot.proposals.filter(proposal => proposal.status === 'pending');
+        const current = options.initialize ? undefined : await loadAuthority(root);
+        const pending = options.initialize
+            ? requestedPending
+            : mergePending(await loadStagedProposals(root), requestedPending, new Set(canonical.proposals.map(value => value.id)));
+        const prepared = await prepareStagedWrite(root, pending);
+        try {
+            if (options.initialize) {
+                await saveAuthority(canonical, root);
+                await prepared.commit();
+                return;
+            }
+            if (!current)
+                throw new Error('current authority is unavailable');
+            if (snapshot.revision === current.revision) {
+                if (stable(canonical) !== stable(authorityProjection(current)))
+                    throw new Error('authority changes require an explicit revision commit');
+                await prepared.commit();
+                return;
+            }
+            if (snapshot.revision !== current.revision + 1)
+                throw new Error(`stale Suo revision: expected ${current.revision.toString()} -> ${(current.revision + 1).toString()}, received ${snapshot.revision.toString()}`);
+            await saveAuthority(canonical, root);
+            try {
+                await prepared.commit();
+            }
+            catch (error) {
+                await saveAuthority(current, root);
+                throw error;
+            }
+        }
+        finally {
+            await prepared.cleanup();
+        }
+    });
+}
+export async function projectRoot(start = process.cwd()) {
+    return findProjectRoot(start);
+}
+async function loadStagedProposals(root) {
+    try {
+        const value = JSON.parse(await readFile(stagedProposalPath(root), 'utf8'));
+        if (!Array.isArray(value))
+            throw new Error('staged proposals must be an array');
+        return value;
+    }
+    catch (error) {
+        if (error.code === 'ENOENT')
+            return [];
+        throw error;
+    }
+}
+async function prepareStagedWrite(root, proposals) {
+    const path = stagedProposalPath(root);
     await mkdir(dirname(path), { recursive: true });
     try {
-        const current = JSON.parse(await readFile(path, 'utf8'));
-        assertValidSnapshot(current);
-        const expected = snapshot.revision - 1;
-        if (current.revision !== expected)
-            throw new Error(`stale Suo revision: expected ${String(current.revision)} -> ${expected}`);
+        if ((await lstat(path)).isDirectory())
+            throw new Error(`staged proposal path is a directory: ${path}`);
     }
     catch (error) {
         if (error.code !== 'ENOENT')
             throw error;
     }
-    const temporary = `${path}.${process.pid}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
-    await rename(temporary, path);
+    if (!proposals.length)
+        return {
+            commit: async () => { await rm(path, { force: true }); },
+            cleanup: async () => { },
+        };
+    const temporary = `${path}.${process.pid.toString()}.${Date.now().toString()}.tmp`;
+    await writeFile(temporary, `${JSON.stringify(proposals, null, 2)}\n`, 'utf8');
+    let committed = false;
+    return {
+        commit: async () => { await rename(temporary, path); committed = true; },
+        cleanup: async () => { if (!committed)
+            await rm(temporary, { force: true }); },
+    };
+}
+function authorityProjection(snapshot) {
+    return {
+        ...structuredClone(snapshot),
+        proposals: snapshot.proposals
+            .filter(proposal => proposal.status !== 'pending')
+            .map(proposal => ({ ...structuredClone(proposal), operations: [] })),
+    };
+}
+function stable(snapshot) {
+    return JSON.stringify(snapshot);
+}
+function mergePending(current, requested, committedIds) {
+    const merged = new Map();
+    for (const proposal of [...current, ...requested]) {
+        if (committedIds.has(proposal.id))
+            continue;
+        const existing = merged.get(proposal.id);
+        if (existing && JSON.stringify(existing) !== JSON.stringify(proposal))
+            throw new Error(`conflicting staged proposal: ${proposal.id}`);
+        merged.set(proposal.id, proposal);
+    }
+    return [...merged.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+async function withWriteLock(root, operation) {
+    const path = writeLockPath(root);
+    await mkdir(dirname(path), { recursive: true });
+    let handle;
+    try {
+        handle = await open(path, 'wx');
+    }
+    catch (error) {
+        if (error.code === 'EEXIST')
+            throw new Error(`another Suo writer holds ${path}`);
+        throw error;
+    }
+    try {
+        return await operation();
+    }
+    finally {
+        try {
+            await handle.close();
+        }
+        finally {
+            await rm(path, { force: true });
+        }
+    }
 }
 //# sourceMappingURL=store.js.map

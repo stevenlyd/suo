@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:suo:schema:snapshot:v2",
-  "title": "Suo Snapshot",
+  "$id": "urn:suo:schema:compiled-snapshot:v2",
+  "title": "Suo Compiled Snapshot (Non-Authority)",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "revision", "product", "modules", "decisions", "proposals", "handoffs", "realizations", "closures"],
@@ -37,7 +37,22 @@
       "type": "object", "additionalProperties": false,
       "required": ["objective", "frozenBehavior", "scope", "nonGoals", "acceptance"],
       "properties": {
-        "objective": { "type": "string" },
+        "objective": {
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "path", "content", "digest"],
+              "properties": {
+                "kind": { "const": "markdown" },
+                "path": { "type": "string", "minLength": 1 },
+                "content": { "type": "string" },
+                "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+              }
+            }
+          ]
+        },
         "frozenBehavior": { "type": "array", "items": { "type": "string" } },
         "scope": { "type": "array", "items": { "type": "string" } },
         "nonGoals": { "type": "array", "items": { "type": "string" } },
@@ -86,7 +101,7 @@
         "status": { "enum": ["pending", "approved", "rejected"] },
         "summary": { "$ref": "#/$defs/nonEmpty" },
         "baseDigest": { "$ref": "#/$defs/nonEmpty" },
-        "operations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/operation" } },
+        "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } },
         "submittedAt": { "$ref": "#/$defs/timestamp" },
         "decidedAt": { "$ref": "#/$defs/timestamp" },
         "rejectionReason": { "type": "string" }
@@ -108,11 +123,11 @@
     },
     "realization": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "moduleId", "handoffId", "handoffRevision", "status", "implementationRefs", "startedAt", "updatedAt"],
+      "required": ["id", "moduleId", "handoffId", "handoffRevision", "status", "agent", "implementationRefs", "startedAt", "updatedAt"],
       "properties": {
         "id": { "$ref": "#/$defs/id" }, "moduleId": { "$ref": "#/$defs/id" }, "handoffId": { "$ref": "#/$defs/id" },
         "handoffRevision": { "type": "integer", "minimum": 1 }, "status": { "enum": ["in_progress", "closure_submitted", "closed", "reopened"] },
-        "agent": { "type": "string" }, "implementationRefs": { "type": "array", "items": { "$ref": "#/$defs/implementationRef" } },
+        "agent": { "$ref": "#/$defs/nonEmpty" }, "implementationRefs": { "type": "array", "items": { "$ref": "#/$defs/implementationRef" } },
         "closureId": { "$ref": "#/$defs/id" }, "startedAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }
       }
     },

@@ -1,5 +1,7 @@
 import type { SuoSnapshot } from './model.js';
-export declare const workspaceDir: (root?: string) => string;
-export declare const snapshotPath: (root?: string) => string;
-export declare function loadSnapshot(root?: string): Promise<SuoSnapshot>;
-export declare function saveSnapshot(snapshot: SuoSnapshot, root?: string): Promise<void>;
+export declare const workspaceDir: (root: string) => string;
+export declare function loadSnapshot(start?: string): Promise<SuoSnapshot>;
+export declare function saveSnapshot(snapshot: SuoSnapshot, start?: string, options?: {
+    initialize?: boolean;
+}): Promise<void>;
+export declare function projectRoot(start?: string): Promise<string>;
