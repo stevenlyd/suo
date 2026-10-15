@@ -4,4 +4,6 @@ export * from './validation.js';
 export * from './store.js';
 export * from './render.js';
 export * from './source.js';
+export * from './knowledge-store.js';
+export * from './vault.js';
 //# sourceMappingURL=index.js.map

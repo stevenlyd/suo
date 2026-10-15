@@ -1,12 +1,13 @@
-import { lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { Proposal, SuoSnapshot } from './model.js'
-import { findProjectRoot, loadAuthority, saveAuthority } from './source.js'
+import { findProjectRoot } from './source.js'
+import { knowledgeStore } from './knowledge-store.js'
+import { withProjectLock } from './project-files.js'
 import { assertValidSnapshot } from './validation.js'
 
 export const workspaceDir = (root: string) => join(root, '.suo')
 const stagedProposalPath = (root: string) => join(workspaceDir(root), 'staged', 'proposals.json')
-const writeLockPath = (root: string) => join(workspaceDir(root), 'write.lock')
 
 interface PreparedStagedWrite {
   commit(): Promise<void>
@@ -15,7 +16,7 @@ interface PreparedStagedWrite {
 
 export async function loadSnapshot(start = process.cwd()): Promise<SuoSnapshot> {
   const root = await findProjectRoot(start)
-  const authority = await loadAuthority(root)
+  const authority = await (await knowledgeStore(root)).load()
   const authorityProposalIds = new Set(authority.proposals.map(value => value.id))
   const staged = (await loadStagedProposals(root)).filter(value => !authorityProposalIds.has(value.id))
   const snapshot = { ...authority, proposals: [...authority.proposals, ...staged] }
@@ -26,17 +27,18 @@ export async function loadSnapshot(start = process.cwd()): Promise<SuoSnapshot> 
 export async function saveSnapshot(snapshot: SuoSnapshot, start = process.cwd(), options: { initialize?: boolean } = {}): Promise<void> {
   assertValidSnapshot(snapshot)
   const root = await findProjectRoot(start, options.initialize === true)
-  await withWriteLock(root, async () => {
+  const adapter = await knowledgeStore(root)
+  await withProjectLock(root, async () => {
     const canonical = authorityProjection(snapshot)
     const requestedPending = snapshot.proposals.filter(proposal => proposal.status === 'pending')
-    const current = options.initialize ? undefined : await loadAuthority(root)
+    const current = options.initialize ? undefined : await adapter.load()
     const pending = options.initialize
       ? requestedPending
       : mergePending(await loadStagedProposals(root), requestedPending, new Set(canonical.proposals.map(value => value.id)))
     const prepared = await prepareStagedWrite(root, pending)
     try {
       if (options.initialize) {
-        await saveAuthority(canonical, root)
+        await adapter.save(canonical)
         await prepared.commit()
         return
       }
@@ -49,12 +51,12 @@ export async function saveSnapshot(snapshot: SuoSnapshot, start = process.cwd(),
       }
       if (snapshot.revision !== current.revision + 1) throw new Error(`stale Suo revision: expected ${current.revision.toString()} -> ${(current.revision + 1).toString()}, received ${snapshot.revision.toString()}`)
 
-      await saveAuthority(canonical, root)
+      await adapter.save(canonical)
       try {
         await prepared.commit()
       } catch (error) {
-        await saveAuthority(current, root)
-        throw error
+        if (adapter.kind === 'repo-ts') { await adapter.save(current); throw error }
+        throw new Error(`Vault revision ${canonical.revision} committed, but local proposal staging failed; reload before retrying`, { cause: error })
       }
     } finally {
       await prepared.cleanup()
@@ -124,19 +126,3 @@ function mergePending(current: Proposal[], requested: Proposal[], committedIds: 
   return [...merged.values()].sort((a, b) => a.id.localeCompare(b.id))
 }
 
-async function withWriteLock<T>(root: string, operation: () => Promise<T>): Promise<T> {
-  const path = writeLockPath(root)
-  await mkdir(dirname(path), { recursive: true })
-  let handle
-  try {
-    handle = await open(path, 'wx')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error(`another Suo writer holds ${path}`)
-    throw error
-  }
-  try {
-    return await operation()
-  } finally {
-    try { await handle.close() } finally { await rm(path, { force: true }) }
-  }
-}
