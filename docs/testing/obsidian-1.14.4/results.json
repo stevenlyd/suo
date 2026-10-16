@@ -1,0 +1,113 @@
+[
+  {
+    "test": "Property link click and native backlinks",
+    "detail": [
+      "Projects/Gallery.md"
+    ]
+  },
+  {
+    "test": "Native graph view",
+    "detail": {
+      "viewType": "graph",
+      "rendererKeys": [
+        "interactiveEl",
+        "onNodeClick",
+        "onNodeRightClick",
+        "onNodeHover",
+        "onNodeUnhover",
+        "workerResults",
+        "nodeLookup",
+        "nodes",
+        "links",
+        "dragNode",
+        "highlightNode",
+        "px",
+        "hanger",
+        "powerTag",
+        "scale",
+        "nodeScale",
+        "textAlpha",
+        "targetScale",
+        "panX",
+        "panY",
+        "panvX",
+        "panvY",
+        "keyboardActions",
+        "panning",
+        "width",
+        "height",
+        "viewport",
+        "zoomCenterX",
+        "zoomCenterY",
+        "hidePowerTag",
+        "fNodeSizeMult",
+        "fLineSizeMult",
+        "fTextShowMult",
+        "fShowArrow",
+        "mouseX",
+        "mouseY",
+        "colors",
+        "renderTimer",
+        "containerEl",
+        "idleFrames",
+        "worker",
+        "iframeEl",
+        "renderCallback",
+        "onPointerDown",
+        "onPointerOver",
+        "onPointerOut"
+      ],
+      "nodes": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4"
+      ]
+    }
+  },
+  {
+    "test": "Native Properties UI edit \u2192 Suo review/approval",
+    "detail": {
+      "changed": true,
+      "revision": 3
+    }
+  },
+  {
+    "test": "Obsidian rename keeps ID and repairs typed links",
+    "detail": {
+      "changed": false,
+      "dependency": [
+        "[[Client Portal]]"
+      ]
+    }
+  },
+  {
+    "test": "Obsidian move across folders preserves relationships",
+    "detail": {
+      "changed": false,
+      "dependency": [
+        "[[Client Portal]]"
+      ]
+    }
+  },
+  {
+    "test": "Editor content and stale review detection",
+    "detail": {
+      "staleError": "review is stale; run suo vault diff again"
+    }
+  },
+  {
+    "test": "External Suo write refreshes real open editor",
+    "detail": {
+      "title": "Updated by Suo while Obsidian is open",
+      "acceptanceUI": "[{\"id\":\"view\",\"text\":\"The customer can view photos.\"}]"
+    }
+  },
+  {
+    "test": "Final round-trip validation",
+    "detail": {
+      "valid": true
+    }
+  }
+]

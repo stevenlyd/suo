@@ -1,0 +1,56 @@
+{
+  "nestedAcceptancePreservedAfterNativePropertyEdit": true,
+  "ordinaryProseRequiresNoApproval": true,
+  "propertyOnlyBacklinks": [
+    [
+      "Research/Gallery.md",
+      [
+        {
+          "key": "suo_dependencies.0",
+          "link": "../Projects/Client Portal",
+          "original": "[[../Projects/Client Portal]]",
+          "displayText": "../Projects/Client Portal"
+        }
+      ]
+    ]
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "Suo Product.md",
+        "type": ""
+      },
+      {
+        "id": "docs/suo/NEXT.md",
+        "type": ""
+      },
+      {
+        "id": "docs/suo/PRODUCT_MAP.md",
+        "type": ""
+      },
+      {
+        "id": "Projects/Client Portal.md",
+        "type": ""
+      },
+      {
+        "id": "Research/Gallery.md",
+        "type": ""
+      }
+    ],
+    "links": [
+      {
+        "source": "Research/Gallery.md",
+        "target": "Projects/Client Portal.md",
+        "keys": [
+          "rendered",
+          "renderer",
+          "source",
+          "target",
+          "px",
+          "line",
+          "arrow"
+        ]
+      }
+    ]
+  }
+}

@@ -222,6 +222,8 @@ Only `suo_dependencies`, `suo_module` and `suo_prerequisites` encode typed node 
 
 Product properties: `suo_title`, `suo_slice`, `suo_profile`; content region: idea. Module properties are shown above; content region: objective. Decision properties: `suo_module`, `suo_alternatives` (objects with `id`, `label`, optional `tradeoffs`), optional `suo_recommendation`, `suo_prerequisites`, `suo_evidence` (URI strings); content region: question. Lifecycle and approval statuses are controlled by protocol operations, not handwritten properties. Unknown `suo_` properties are rejected.
 
+Real application validation: [Obsidian 1.14.4 on Linux](docs/testing/obsidian-1.14.4/README.md), including screenshots and reproducible desktop scripts. Native Properties displays nested acceptance data as JSON; save editor changes before asking Suo to review them.
+
 ### Working notes and approved versions
 
 - `suo vault check` validates the working notes and generates disposable TS at `.suo/compiled/suo/`. It does not approve anything.
