@@ -44,6 +44,34 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe('TypeScript ontology authority', () => {
+  it.each(['git', 'suo'])('initializes the exact target beneath an existing %s root', async (ancestorKind) => {
+    const parent = await mkdtemp(join(tmpdir(), 'suo-init-boundary-'))
+    const root = join(parent, 'child')
+    await mkdir(root)
+    const parentSnapshot = createProduct({ title: 'Parent', idea: 'Keep the parent unchanged.' })
+    const childSnapshot = createProduct({ title: 'Child', idea: 'Initialize only the selected directory.' })
+    try {
+      if (ancestorKind === 'git') await mkdir(join(parent, '.git'))
+      else await saveAuthority(parentSnapshot, parent)
+      const parentBefore = ancestorKind === 'suo'
+        ? await readFile(join(parent, 'suo/product.suo.ts'), 'utf8')
+        : undefined
+
+      await saveSnapshot(childSnapshot, root, { initialize: true })
+
+      expect((await loadAuthority(root)).product.id).toBe(childSnapshot.product.id)
+      if (parentBefore !== undefined) {
+        expect(await readFile(join(parent, 'suo/product.suo.ts'), 'utf8')).toBe(parentBefore)
+      } else {
+        expect(await exists(join(parent, 'suo'))).toBe(false)
+      }
+      expect(await exists(join(parent, '.suo'))).toBe(false)
+      expect((await loadSnapshot(root)).product.id).toBe(childSnapshot.product.id)
+    } finally {
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+
   it('persists nodes as imported TypeScript resources without an authority JSON snapshot', async () => {
     const { root, snapshot } = await populatedProject()
     const feature = await readFile(join(root, 'suo/modules/feature.suo.ts'), 'utf8')
