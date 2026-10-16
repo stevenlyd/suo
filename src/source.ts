@@ -104,7 +104,7 @@ declare module '*.md' {
 export async function findProjectRoot(start = process.cwd(), allowUninitialized = false): Promise<string> {
   let current = resolve(start)
   while (true) {
-    if (await exists(join(current, sourceDirectoryName, sourceRootFileName))) return current
+    if (await exists(join(current, 'suo.vault.json')) || await exists(join(current, sourceDirectoryName, sourceRootFileName))) return current
     const parent = dirname(current)
     if (parent === current) break
     current = parent
@@ -516,3 +516,4 @@ async function enforceRealImportBoundary(root: string, path: string, source: ts.
 function inside(parent: string, child: string): boolean { return child === parent || child.startsWith(`${parent}${sep}`) }
 function toImplementationRef(value: ResourceNode): ImplementationRef { return { kind: value.kind === 'evidence' ? 'file' : value.kind, uri: value.uri, ...(value.revision ? { revision: value.revision } : {}) } }
 function without<T extends object, K extends keyof T>(value: T, keys: readonly K[]): Omit<T, K> { const copy = { ...value }; for (const key of keys) delete copy[key]; return copy }
+

@@ -2,7 +2,7 @@
 
 **A shuttle for thought.**
 
-Suo lets a person think in one conversational thread while a multidimensional Product model takes form underneath.
+Suo is a portable, stateless Skill backed by deterministic local tools. It helps a person turn ideas into a validated Product model stored in their own knowledge base. The Skill is the needle; each project is the fabric.
 
 > Your idea is the work. Suo is only the shuttle.
 
@@ -18,7 +18,8 @@ The agent reads the current frontier, asks one bounded question, recommends an a
 Human
   → Hermes / Codex / Pi + Suo Skill
   → suo CLI
-  → imported TypeScript ontology + Markdown resources
+  → project knowledge-store adapter
+  → repo TypeScript (default) or Obsidian Vault (optional)
 ```
 
 ## The loop
@@ -28,7 +29,7 @@ Human
 → exactly one NextProductAction
 → agent proposal
 → explicit owner approval
-→ TypeScript authority commit
+→ knowledge-store commit
 → frozen handoff
 → external implementation
 → evidence-backed closure
@@ -38,7 +39,11 @@ Human
 
 Product definition and implementation reality are separate. An external agent can submit evidence but cannot accept its own closure.
 
-## Project layout
+## Default: repository TypeScript store
+
+Existing TS projects keep their current layout and behavior. Obsidian is optional.
+
+### Project layout
 
 ```text
 <project>/
@@ -58,7 +63,7 @@ Product definition and implementation reality are separate. An external agent ca
 └── .suo/                         local cache and staged proposals
 ```
 
-There is no authoritative JSON snapshot. `suo/**/*.suo.ts` and imported Markdown are the authority. `.suo/` contains transient machine state and should normally be ignored by Git. `docs/suo/` can always be regenerated.
+In the default TS store, there is no authoritative JSON snapshot. `suo/**/*.suo.ts` and imported Markdown are the authority. `.suo/` contains transient machine state and should normally be ignored by Git. `docs/suo/` can always be regenerated.
 
 ## Import graph is the ontology graph
 
@@ -142,7 +147,7 @@ suo submit examples/proposal-intake.json
 suo approve proposal:intake --yes
 ```
 
-Submission JSON is only a protocol envelope staged under `.suo/`; it is not Product authority. Approval checks the proposal base digest, applies the change to imported TypeScript/Markdown sources, checks the complete ontology, and regenerates `docs/suo/`.
+Submission JSON is only a protocol envelope staged under `.suo/`; it is not Product authority. Approval checks the proposal base digest, applies the change through the project’s adapter, validates the model, and regenerates `docs/suo/`. The TS adapter updates imported source files; the Obsidian adapter updates enrolled notes and appends a durable revision record.
 
 Reject instead:
 
@@ -170,6 +175,91 @@ suo check
 ```
 
 `suo check` performs TypeScript compilation, import reachability, Markdown resolution and hashing, ID uniqueness, definition-DAG validation, lifecycle validation, closure validation, and generated-document reconciliation.
+
+## Optional: Obsidian knowledge store
+
+Use your existing Markdown notes in place. No Obsidian application, UI plugin, account or server is required by this first adapter. Each project chooses one authority: TS or Vault notes. Suo never silently synchronizes two editable sources of truth.
+
+```bash
+suo vault init ./my-vault --idea "A private client gallery"
+suo vault adopt Projects/Gallery.md --kind module --root ./my-vault
+suo vault diff --root ./my-vault
+# After reviewing the exact before/after values and obtaining owner approval:
+suo vault approve --digest <digest-from-diff> --yes --root ./my-vault
+suo next --json --root ./my-vault
+```
+
+`adopt` requires an existing note. It preserves the existing body and unrelated frontmatter, adds a stable ID, and appends an explicit content region. The owner/agent fills that region with the module objective. A decision can be enrolled with `--kind decision --module "[[Projects/Gallery]]"`; its region contains the question.
+
+Example module note (IDs are normally generated automatically):
+
+```markdown
+---
+tags: [product]
+suo_id: module:gallery
+suo_kind: module
+suo_title: Client gallery
+suo_phase: mvp
+suo_dependencies:
+  - "[[Projects/Client portal]]"
+suo_frozen_behavior: [Only authorized clients can view photos.]
+suo_scope: [Private viewing]
+suo_non_goals: [Public publishing]
+suo_acceptance:
+  - id: authorized
+    text: An authorized client can view their photos.
+---
+# Client gallery
+
+Personal research and ordinary [[links]] remain yours.
+
+<!-- suo:content -->
+Help clients view their delivered photos privately.
+<!-- /suo:content -->
+```
+
+Only `suo_dependencies`, `suo_module` and `suo_prerequisites` encode typed node relationships; ordinary prose links do not. Relationships use quoted whole-note wikilinks to enrolled notes, preferably Vault-relative paths. Labels and explicit relative paths (`./` or `../`) are supported; ambiguous basenames, block/heading relationship targets, duplicate IDs, missing nodes and wrong node types are rejected. Stable IDs survive file renames, but relationship links must still resolve (Obsidian can update those links when renaming).
+
+Product properties: `suo_title`, `suo_slice`, `suo_profile`; content region: idea. Module properties are shown above; content region: objective. Decision properties: `suo_module`, `suo_alternatives` (objects with `id`, `label`, optional `tradeoffs`), optional `suo_recommendation`, `suo_prerequisites`, `suo_evidence` (URI strings); content region: question. Lifecycle and approval statuses are controlled by protocol operations, not handwritten properties. Unknown `suo_` properties are rejected.
+
+Real application validation: [Obsidian 1.14.4 on Linux](docs/testing/obsidian-1.14.4/README.md), including screenshots and reproducible desktop scripts. Native Properties displays nested acceptance data as JSON; save editor changes before asking Suo to review them.
+
+### Working notes and approved versions
+
+- `suo vault check` validates the working notes and generates disposable TS at `.suo/compiled/suo/`. It does not approve anything.
+- `suo vault diff` returns authored before/after values and a review digest bound to the current revision and exact enrolled note contents.
+- `suo vault approve --digest ... --yes` accepts that reviewed draft. Editing even unrelated content after review invalidates the digest.
+- Existing `submit`, `approve`, `reject`, `next`, `inspect` and `check` work with either adapter. In Vault mode, unapproved definition edits block these commands until reviewed. Personal prose outside the managed region does not require approval.
+- Agent proposal approval writes back to the same notes. Approved/deferred decisions must be reopened through a proposal before their definitions are edited. Freeze and closure acceptance still require the usual protocol actions.
+- Generated handoffs in Vault mode use the original approved contract, even after current notes change. Affected active handoffs become stale when the new definition is approved.
+
+### What travels with the project
+
+```text
+my-vault/
+├── suo.vault.json          adapter selection, not user-global configuration
+├── Projects/*.md          enrolled notes alongside ordinary knowledge
+├── Suo Product.md         initial product note; may be renamed
+├── Suo/*.md               new nodes created by approved Agent proposals
+├── suo-history/*.json     durable approved revisions and lifecycle records
+├── docs/suo/              generated reading views
+└── .suo/                  disposable TS/cache and local pending submissions
+```
+
+Back up and sync **notes, the marker, and `suo-history/` together**. History is machine-managed and must not be edited or discarded. It records approvals and exact historical versions; it is not another definition for the user to maintain. Hash chaining catches inconsistent history, not malicious rewriting of the whole archive. `.suo/` may be removed, losing only cache and unapproved staged proposals.
+
+A durable transaction journal blocks normal operations after an interrupted write. `suo vault recover --root <directory>` rolls back uncommitted note writes or finishes cleanup of an already committed revision. It refuses to overwrite external edits. After a process crash, first verify no Suo writer is running before removing a leftover `.suo/write.lock`, then run recovery. Do not delete history to clear an error. Initialization recovery may leave an empty `suo-history/` directory; inspect and remove that empty directory before retrying initialization.
+
+The first adapter supports one product per project root, local files, and explicit content regions. Native heading/block bindings (including imported `MarkdownDocument` objectives in proposals), rich evidence nodes, legacy TS migration, multi-product membership within one Vault, and the Obsidian sidebar/UI plugin are future work. Symlink enrollment is unsupported. There is no lossless legacy TS-to-Vault migration claim.
+
+## Use the same Skill on another project
+
+```bash
+suo next --root ./repo-a --json
+suo next --root ./vault-b --json
+```
+
+All commands accept `--root`; without it they discover the nearest initialized project above the current directory. There is no persistent active project. Another compatible Agent can continue from the same files without the previous conversation. The adapter objects are created for each invocation; Product rules remain in the shared kernel.
 
 ## Deterministic boundaries
 
@@ -212,3 +302,4 @@ node dist/cli.js --help
 ## License
 
 MIT
+

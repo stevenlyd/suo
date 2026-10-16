@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { adoptVaultNote, approveVaultDraft, compileVault, initVault, readVaultDraft, recoverVault } from './vault.js'
 import {
   acceptClosure,
   approveProposal,
@@ -21,9 +22,14 @@ import type { SubmissionEnvelope, SuoSnapshot } from './model.js'
 
 const argv = process.argv.slice(2)
 const command = argv.shift()
+let commandRoot = process.cwd()
+let explicitRoot: string | undefined
 
 try {
+  explicitRoot = flag('--root')
+  commandRoot = resolve(explicitRoot ?? '.')
   switch (command) {
+    case 'vault': await vaultCommand(); break
     case 'init': await initCommand(); break
     case 'next': await nextCommand(); break
     case 'submit': await submitCommand(); break
@@ -44,16 +50,53 @@ try {
   process.exitCode = 1
 }
 
+async function vaultCommand(): Promise<void> {
+  const action = requiredArg('vault action')
+  if (action === 'init') {
+    const idea = requiredFlag('--idea')
+    const title = flag('--title')
+    const root = resolve(explicitRoot ?? argv.shift() ?? commandRoot)
+    const snapshot = await initVault(root, idea, title)
+    await generateArtifacts(snapshot, root)
+    print({ root, adapter: 'obsidian', revision: snapshot.revision })
+    return
+  }
+  const root = action === 'recover' && explicitRoot ? commandRoot : await findProjectRoot(commandRoot)
+  switch (action) {
+    case 'adopt': {
+      const path = requiredArg('note path relative to project root')
+      const kind = requiredFlag('--kind')
+      if (kind !== 'module' && kind !== 'decision') throw new Error('kind must be module or decision')
+      print({ id: await adoptVaultNote(root, path, kind, flag('--module')), status: 'draft' })
+      break
+    }
+    case 'check': print(await compileVault(root)); break
+    case 'diff': {
+      const draft = await readVaultDraft(root)
+      print({ changed: draft.changed, digest: draft.token, before: draft.before, after: draft.after })
+      break
+    }
+    case 'approve': {
+      if (!hasFlag('--yes')) throw new Error('approval requires --yes after explicit owner approval')
+      const snapshot = await approveVaultDraft(root, requiredFlag('--digest'))
+      await generateArtifacts(snapshot, root)
+      print({ revision: snapshot.revision, next: nextAction(snapshot) })
+      break
+    }
+    case 'recover': print({ recovery: await recoverVault(root) }); break
+    default: throw new Error('usage: suo vault init|adopt|check|diff|approve|recover')
+  }
+}
+
 async function initCommand(): Promise<void> {
   const flaggedIdea = flag('--idea')
-  const explicitRoot = flag('--root')
   const positionals = positionalArgs(argv)
   const requestedRoot = explicitRoot ?? (flaggedIdea && positionals[0] ? positionals[0] : undefined)
-  const root = requestedRoot ? resolve(requestedRoot) : await findProjectRoot('.', true)
+  const root = requestedRoot ? resolve(requestedRoot) : await findProjectRoot(commandRoot, true)
   const idea = flaggedIdea ?? positionals[0]
   if (!idea?.trim()) throw new Error('usage: suo init [project-directory] --idea "I have an idea..." [--title <title>]')
   await mkdir(root, { recursive: true })
-  if (await pathExists(resolve(root, 'suo', 'product.suo.ts'))) throw new Error(`Suo is already initialized at ${root}`)
+  if (await pathExists(resolve(root, 'suo', 'product.suo.ts')) || await pathExists(resolve(root, 'suo.vault.json'))) throw new Error(`Suo is already initialized at ${root}`)
   const title = flag('--title')?.trim() || idea.trim().split(/\s+/).slice(0, 8).join(' ')
   const productId = flag('--id')
   const activeSlice = flag('--slice')
@@ -72,7 +115,7 @@ async function initCommand(): Promise<void> {
 }
 
 async function nextCommand(): Promise<void> {
-  const action = nextAction(await loadSnapshot())
+  const action = nextAction(await loadSnapshot(commandRoot))
   if (hasFlag('--json')) print(action, true)
   else console.log(renderNext(action).replace(/^<!--[^\n]*-->\n?/, '').trim())
 }
@@ -114,7 +157,7 @@ async function rejectCommand(): Promise<void> {
 }
 
 async function inspectCommand(): Promise<void> {
-  const snapshot = await loadSnapshot()
+  const snapshot = await loadSnapshot(commandRoot)
   const targetId = argv.find(value => !value.startsWith('--'))
   if (!targetId) {
     print({
@@ -134,18 +177,18 @@ async function inspectCommand(): Promise<void> {
 }
 
 async function checkCommand(): Promise<void> {
-  const snapshot = await loadSnapshot()
+  const snapshot = await loadSnapshot(commandRoot)
   const issues = validateSnapshot(snapshot)
   if (issues.length) throw new Error(issues.join('\n'))
-  const generated = await generateArtifacts(snapshot)
+  const generated = await generateArtifacts(snapshot, commandRoot)
   print({ valid: true, revision: snapshot.revision, generated })
 }
 
 async function mutate(operation: (snapshot: SuoSnapshot) => SuoSnapshot): Promise<void> {
-  const current = await loadSnapshot()
+  const current = await loadSnapshot(commandRoot)
   const next = operation(current)
-  await saveSnapshot(next)
-  await generateArtifacts(next)
+  await saveSnapshot(next, commandRoot)
+  await generateArtifacts(next, commandRoot)
   print({ revision: next.revision, next: nextAction(next) })
 }
 
@@ -214,4 +257,13 @@ Usage:
   suo reject <closure-id> --reason <reason> --verifier <identity>
   suo inspect [record-id] [--json]
   suo check
+  suo vault init [directory] --idea <idea> [--title <title>]
+  suo vault adopt <note.md> --kind module|decision [--module "[[Module note]]"]
+  suo vault check
+  suo vault diff
+  suo vault approve --digest <reviewed-digest> --yes
+  suo vault recover
+
+All commands accept --root <project-directory>. No global active project is stored.
 ` }
+

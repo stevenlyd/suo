@@ -38,7 +38,8 @@
     "esbuild": "0.25.9",
     "graphology": "0.26.0",
     "graphology-dag": "0.4.1",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "yaml": "2.8.1"
   },
   "devDependencies": {
     "@types/node": "24.3.0",

@@ -44,7 +44,7 @@ declare module '*.md' {
 export async function findProjectRoot(start = process.cwd(), allowUninitialized = false) {
     let current = resolve(start);
     while (true) {
-        if (await exists(join(current, sourceDirectoryName, sourceRootFileName)))
+        if (await exists(join(current, 'suo.vault.json')) || await exists(join(current, sourceDirectoryName, sourceRootFileName)))
             return current;
         const parent = dirname(current);
         if (parent === current)
