@@ -1,5 +1,5 @@
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { findProjectRoot } from './source.js';
 import { knowledgeStore } from './knowledge-store.js';
 import { withProjectLock } from './project-files.js';
@@ -17,7 +17,9 @@ export async function loadSnapshot(start = process.cwd()) {
 }
 export async function saveSnapshot(snapshot, start = process.cwd(), options = {}) {
     assertValidSnapshot(snapshot);
-    const root = await findProjectRoot(start, options.initialize === true);
+    // Initialization receives the selected destination (the CLI already resolves
+    // implicit Git roots). Rediscovery here can redirect writes into an ancestor.
+    const root = options.initialize ? resolve(start) : await findProjectRoot(start);
     const adapter = await knowledgeStore(root);
     await withProjectLock(root, async () => {
         const canonical = authorityProjection(snapshot);
