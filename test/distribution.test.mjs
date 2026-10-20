@@ -51,12 +51,12 @@ describe('native distribution', () => {
   })
 
   it('synchronizes versions deterministically and rejects malformed versions', () => {
-    const root = fixture(); changePackage(root, pkg => { pkg.version = '0.4.1' })
+    const root = fixture(); changePackage(root, pkg => { pkg.version = nextVersion(pkg.version) })
     expect(() => checkDistribution(root)).toThrow()
     writeDistribution(root); checkDistribution(root)
     const before = read(root, 'distribution-lock.json'); writeDistribution(root)
     expect(read(root, 'distribution-lock.json')).toBe(before)
-    expect(read(root, 'skills/suo/SKILL.md')).toContain('version: 0.4.1\n')
+    expect(read(root, 'skills/suo/SKILL.md')).toContain(`version: ${JSON.parse(read(root, 'package.json')).version}\n`)
     changePackage(root, pkg => { pkg.version = '01.2.3' })
     expect(() => writeDistribution(root)).toThrow('stable MAJOR.MINOR.PATCH')
   })
@@ -86,10 +86,12 @@ describe('native distribution', () => {
     writeFileSync(join(root, 'skills/suo/SKILL.md'), read(root, 'skills/suo/SKILL.md') + '\nReviewed change.\n')
     writeDistribution(root)
     expect(() => checkRelease(base, root)).toThrow('version increase')
-    changePackage(root, pkg => { pkg.version = '0.4.1' }); writeDistribution(root)
+    changePackage(root, pkg => { pkg.version = nextVersion(pkg.version) }); writeDistribution(root)
     expect(() => checkRelease(base, root)).not.toThrow()
     expect(() => checkRelease('main', root)).toThrow('full commit SHA')
     expect(newerVersion('0.4.0', '0.3.1')).toBe(true)
     expect(newerVersion('0.4.0', '0.4.0')).toBe(false)
   })
 })
+
+function nextVersion(version) { const [major, minor, patch] = version.split('.'); return `${major}.${minor}.${Number(patch) + 1}` }

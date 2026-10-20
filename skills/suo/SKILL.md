@@ -1,7 +1,7 @@
 ---
 name: suo
 description: "Use when an idea needs one bounded Product decision."
-version: 0.4.0
+version: 0.4.1
 license: MIT
 compatibility: "Requires Node.js 22.18+ and the suo CLI."
 metadata:
@@ -48,7 +48,7 @@ The person talks naturally. Do not ask them to write JSON, remember entity IDs, 
 - Silence, confidence, code, or continued conversation never counts as approval.
 - Product definition and implementation realization remain separate.
 - External agents submit closure evidence but cannot accept their own closure.
-- Approved history is superseded or retired, never silently rewritten.
+- Approved history is superseded or retired, never silently rewritten. Proven handoff Product-revision metadata errors may use the explicit `correct_handoff_product_revision` proposal operation with expected old value, reviewed replacement, reason and fixed historical evidence; it preserves an attached correction audit and never changes frozen semantics. Do not infer corrections from counter size or automatically migrate old records.
 
 ## Workflow
 

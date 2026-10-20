@@ -56,7 +56,17 @@ export interface FrozenDefinition {
     module: ProductModule;
     decisions: Decision[];
 }
+export interface HandoffRevisionCorrection {
+    from: number;
+    to: number;
+    reason: string;
+    evidenceRefs: string[];
+    proposalId: string;
+    revision: number;
+    correctedAt: string;
+}
 export interface Handoff {
+    productRevisionCorrections?: HandoffRevisionCorrection[];
     frozenDefinition?: FrozenDefinition;
     id: string;
     moduleId: string;
@@ -193,6 +203,13 @@ export type ProductOperation = {
 } | {
     type: 'freeze_module';
     moduleId: string;
+} | {
+    type: 'correct_handoff_product_revision';
+    handoffId: string;
+    expectedFrom: number;
+    to: number;
+    reason: string;
+    evidenceRefs: string[];
 } | {
     type: 'reopen_closure';
     realizationId: string;

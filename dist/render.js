@@ -58,6 +58,7 @@ export function renderDag(snapshot) {
 export function renderHandoff(snapshot, handoff, historical) {
     // Current definitions are never evidence of a legacy handoff's original body.
     const frozen = handoff.frozenDefinition ?? (historical && historicalDefinition(historical, handoff));
+    const corrections = (handoff.productRevisionCorrections ?? []).map(value => `\nRevision correction: ${value.from} → ${value.to}; approved in Product revision ${value.revision} by proposal \`${value.proposalId}\` at ${value.correctedAt}. ${value.reason}\nEvidence: ${value.evidenceRefs.join(', ')}\n`).join('');
     if (!frozen)
         return `${generatedBanner}
 # Handoff: ${handoff.moduleId}
@@ -66,7 +67,7 @@ export function renderHandoff(snapshot, handoff, historical) {
 - Product revision: ${handoff.productRevision}
 - Status: ${handoff.status}
 - Contract digest: \`${handoff.contractDigest}\`
-
+${corrections}
 ## Historical content unavailable
 No verified frozen definition is available for this handoff. Current definitions are omitted.
 Recover the original approved source from a trusted backup or Git-pinned revision; do not reconstruct it from the current contract.
@@ -80,7 +81,7 @@ Recover the original approved source from a trusted backup or Git-pinned revisio
 - Product revision: ${handoff.productRevision}
 - Status: ${handoff.status}
 - Contract digest: \`${handoff.contractDigest}\`
-${provenance}
+${corrections}${provenance}
 ## Product objective
 ${proseText(module.contract.objective)}
 
@@ -156,7 +157,7 @@ function renderDecision(value) { return `- **${value.question}** — ${value.own
 function escapeMermaid(value) { return value.replaceAll('"', "'").replaceAll('\n', ' '); }
 function safe(value) { return value.replaceAll(':', '_').replaceAll('/', '_'); }
 function historicalDefinition(snapshot, handoff) {
-    const original = snapshot.handoffs.find(value => value.id === handoff.id && value.moduleId === handoff.moduleId && value.revision === handoff.revision && value.productRevision === handoff.productRevision && value.createdAt === handoff.createdAt && value.contractDigest === handoff.contractDigest);
+    const original = snapshot.handoffs.find(value => value.id === handoff.id && value.moduleId === handoff.moduleId && value.revision === handoff.revision && value.productRevision === (handoff.productRevisionCorrections?.[0]?.from ?? handoff.productRevision) && value.createdAt === handoff.createdAt && value.contractDigest === handoff.contractDigest);
     const module = snapshot.modules.find(value => value.id === handoff.moduleId);
     // Proposal approval folds multiple operations into one revision, so the stored
     // handoff productRevision can exceed the containing Vault record revision.
