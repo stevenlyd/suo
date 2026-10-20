@@ -1,4 +1,4 @@
-import type { ClosureEnvelope, ClosureSubmission, Decision, ModuleContract, NextProductAction, ProposalSubmission, Prose, SuoSnapshot } from './model.js';
+import type { ClosureEnvelope, ClosureSubmission, Decision, ModuleContract, NextProductAction, ProposalSubmission, Prose, SuoSnapshot, ProductModule } from './model.js';
 export interface MutationOptions {
     now?: string;
     id?: string;
@@ -55,3 +55,4 @@ export declare function validateInvariants(snapshot: SuoSnapshot): string[];
 export declare function moduleTopologicalOrder(snapshot: SuoSnapshot): string[];
 export declare function proseText(value: Prose): string;
 export declare function reconcileImportedAuthority(snapshot: SuoSnapshot): SuoSnapshot;
+export declare function handoffDefinitionDigest(snapshot: SuoSnapshot, module: ProductModule): string;

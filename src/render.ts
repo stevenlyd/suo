@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Closure, Decision, Handoff, NextProductAction, SuoSnapshot, ProductModule } from './model.js'
-import { moduleTopologicalOrder, nextAction, proseText } from './core.js'
+import type { Closure, Decision, Handoff, NextProductAction, SuoSnapshot } from './model.js'
+import { handoffDefinitionDigest, moduleTopologicalOrder, nextAction, proseText } from './core.js'
 import { findProjectRoot } from './source.js'
 import { isVault, readVaultHistory } from './vault.js'
 
@@ -58,9 +58,23 @@ export function renderDag(snapshot: SuoSnapshot): string {
 `
 }
 
-export function renderHandoff(snapshot: SuoSnapshot, handoff: Handoff): string {
-  const module = snapshot.modules.find(value => value.id === handoff.moduleId)!
-  const decisions = handoff.decisionIds.map(id => snapshot.decisions.find(value => value.id === id)!).filter(Boolean)
+export function renderHandoff(snapshot: SuoSnapshot, handoff: Handoff, historical?: SuoSnapshot): string {
+  // Current definitions are never evidence of a legacy handoff's original body.
+  const frozen = handoff.frozenDefinition ?? (historical && historicalDefinition(historical, handoff))
+  if (!frozen) return `${generatedBanner}
+# Handoff: ${handoff.moduleId}
+
+- Handoff: \`${handoff.id}\` revision ${handoff.revision}
+- Product revision: ${handoff.productRevision}
+- Status: ${handoff.status}
+- Contract digest: \`${handoff.contractDigest}\`
+
+## Historical content unavailable
+No verified frozen definition is available for this handoff. Current definitions are omitted.
+Recover the original approved source from a trusted backup or Git-pinned revision; do not reconstruct it from the current contract.
+`
+  const { module, decisions } = frozen
+  const provenance = handoff.frozenDefinition ? '' : '\nLegacy history: contract and decision values verified against the recorded digest. Original titles and decision questions were not covered by that digest; stable IDs are shown instead.\n'
   return `${generatedBanner}
 # Handoff: ${module.title}
 
@@ -68,7 +82,7 @@ export function renderHandoff(snapshot: SuoSnapshot, handoff: Handoff): string {
 - Product revision: ${handoff.productRevision}
 - Status: ${handoff.status}
 - Contract digest: \`${handoff.contractDigest}\`
-
+${provenance}
 ## Product objective
 ${proseText(module.contract.objective)}
 
@@ -123,7 +137,7 @@ ${lineList(closure.residualRisks)}
 export async function generateArtifacts(snapshot: SuoSnapshot, root = process.cwd()): Promise<string[]> {
   const project = await findProjectRoot(root)
   const history = await isVault(project) ? await readVaultHistory(project) : []
-  const frozenSnapshot = (handoff: Handoff): SuoSnapshot => history.find(record => record.snapshot.handoffs.some(value => value.id === handoff.id))?.snapshot ?? snapshot
+  const frozenSnapshot = (handoff: Handoff): SuoSnapshot | undefined => history.find(record => record.snapshot.handoffs.some(value => value.id === handoff.id))?.snapshot
   const output = join(project, 'docs', 'suo')
   const handoffs = join(output, 'HANDOFFS')
   const closures = join(output, 'CLOSURES')
@@ -135,7 +149,7 @@ export async function generateArtifacts(snapshot: SuoSnapshot, root = process.cw
 `],
     [join(output, 'PRODUCT_MAP.md'), renderMap(snapshot)],
     [join(output, 'PRODUCT_DAG.mmd'), renderDag(snapshot)],
-    ...snapshot.handoffs.map(value => [join(handoffs, `${safe(value.id)}.md`), renderHandoff(frozenSnapshot(value), value)] as [string, string]),
+    ...snapshot.handoffs.map(value => [join(handoffs, `${safe(value.id)}.md`), renderHandoff(snapshot, value, frozenSnapshot(value))] as [string, string]),
     ...snapshot.closures.map(value => [join(closures, `${safe(value.id)}.md`), renderClosure(snapshot, value)] as [string, string]),
   ]
   for (const [path, content] of files) await writeFile(path, content, 'utf8')
@@ -146,3 +160,13 @@ function renderDecision(value: Decision): string { return `- **${value.question}
 function escapeMermaid(value: string): string { return value.replaceAll('"', "'").replaceAll('\n', ' ') }
 function safe(value: string): string { return value.replaceAll(':', '_').replaceAll('/', '_') }
 
+function historicalDefinition(snapshot: SuoSnapshot, handoff: Handoff) {
+  const original = snapshot.handoffs.find(value => value.id === handoff.id && value.moduleId === handoff.moduleId && value.revision === handoff.revision && value.productRevision === handoff.productRevision && value.createdAt === handoff.createdAt && value.contractDigest === handoff.contractDigest)
+  const module = snapshot.modules.find(value => value.id === handoff.moduleId)
+  // Proposal approval folds multiple operations into one revision, so the stored
+  // handoff productRevision can exceed the containing Vault record revision.
+  if (!original || !module || handoffDefinitionDigest(snapshot, module) !== handoff.contractDigest) return undefined
+  const decisions = handoff.decisionIds.map(id => snapshot.decisions.find(value => value.id === id))
+  if (decisions.some(value => !value)) return undefined
+  return { module: { ...module, title: module.id }, decisions: (decisions as Decision[]).map(value => ({ ...value, question: value.id })) }
+}
