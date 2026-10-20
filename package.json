@@ -1,6 +1,6 @@
 {
   "name": "@stevenlyd/suo",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A shuttle for thought: one decision at a time, into form.",
   "type": "module",
   "private": true,
@@ -18,6 +18,14 @@
     "dist",
     "schemas",
     "skills",
+    "scripts/distribution.mjs",
+    "docs/distribution.md",
+    "docs/testing/distribution.md",
+    "plugin.json",
+    ".claude-plugin",
+    ".agents/plugins",
+    "gemini-extension.json",
+    "distribution-lock.json",
     "README.md",
     "LICENSE"
   ],
@@ -25,8 +33,11 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build",
-    "prepack": "npm run build"
+    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm distribution:check",
+    "prepack": "npm run distribution:check",
+    "distribution:generate": "node scripts/distribution.mjs --write",
+    "distribution:check": "node scripts/distribution.mjs --check",
+    "test:package": "node test/package-e2e.mjs"
   },
   "pi": {
     "skills": [
@@ -49,5 +60,12 @@
     "node": ">=22.18.0"
   },
   "packageManager": "pnpm@10.28.1",
-  "license": "MIT"
+  "license": "MIT",
+  "author": {
+    "name": "Steven Liu"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stevenlyd/suo"
+  }
 }

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "suo",
+  "version": "0.4.0",
+  "description": "A shuttle for thought: one decision at a time, into form.",
+  "author": {
+    "name": "Steven Liu"
+  },
+  "repository": "https://github.com/stevenlyd/suo",
+  "license": "MIT"
+}
