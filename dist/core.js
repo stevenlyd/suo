@@ -393,8 +393,19 @@ export function approveProposal(snapshot, proposalId, options = {}) {
         throw new Error('proposal is stale; submit a revised proposal against current Product authority');
     const timestamp = now(options.now);
     let next = copy(snapshot);
-    for (const operation of proposal.operations)
-        next = applyProductOperation(next, operation, timestamp);
+    const existingHandoffs = new Set(snapshot.handoffs.map(value => value.id));
+    const approval = { proposalId, revision: snapshot.revision + 1 };
+    for (const operation of proposal.operations) {
+        if (operation.type === 'correct_handoff_product_revision' && !existingHandoffs.has(operation.handoffId))
+            throw new Error('revision corrections require a previously committed handoff');
+        next = applyProductOperation(next, operation, timestamp, approval);
+    }
+    // Operations use standalone mutation counters internally. A proposal is one
+    // atomic commit, so its newly frozen handoffs must reference that commit.
+    // Never reinterpret previously committed/imported provenance on approval.
+    for (const handoff of next.handoffs)
+        if (!existingHandoffs.has(handoff.id))
+            handoff.productRevision = approval.revision;
     const approved = requireProposal(next, proposalId);
     approved.status = 'approved';
     approved.decidedAt = timestamp;
@@ -493,6 +504,15 @@ export function validateInvariants(snapshot) {
             seen.has(value.id) ? issues.push(`duplicate ${label} id: ${value.id}`) : seen.add(value.id);
     }
     for (const handoff of snapshot.handoffs) {
+        const corrections = handoff.productRevisionCorrections ?? [];
+        if (corrections.some((value, index) => value.from === value.to || value.to >= value.revision ||
+            value.revision > snapshot.revision ||
+            !snapshot.proposals.some(proposal => proposal.id === value.proposalId && proposal.status === 'approved' && proposal.decidedAt === value.correctedAt) ||
+            !value.reason.trim() || value.evidenceRefs.some(ref => !ref.trim()) ||
+            (index > 0 && (value.from !== corrections[index - 1].to || value.revision < corrections[index - 1].revision))) ||
+            (corrections.length && corrections.at(-1).to !== handoff.productRevision)) {
+            issues.push(`invalid Product revision correction chain: ${handoff.id}`);
+        }
         const frozen = handoff.frozenDefinition;
         if (!frozen)
             continue; // Legacy records remain readable without inventing history.
@@ -652,7 +672,7 @@ function definitionDigest(snapshot) {
         decisions: snapshot.decisions,
     })).digest('hex');
 }
-function applyProductOperation(snapshot, operation, timestamp) {
+function applyProductOperation(snapshot, operation, timestamp, approval) {
     const options = { now: timestamp };
     switch (operation.type) {
         case 'create_module': return createModule(snapshot, operation.module, options);
@@ -692,6 +712,23 @@ function applyProductOperation(snapshot, operation, timestamp) {
             now: timestamp,
         });
         case 'freeze_module': return freezeModule(snapshot, operation.moduleId, options);
+        case 'correct_handoff_product_revision': {
+            const next = copy(snapshot);
+            const handoff = requireHandoff(next, operation.handoffId);
+            if (handoff.productRevision !== operation.expectedFrom)
+                throw new Error('handoff revision correction is stale');
+            if (!Number.isSafeInteger(operation.to) || operation.to < 0 || operation.to >= approval.revision || operation.to === operation.expectedFrom)
+                throw new Error('correction must identify a different, previously committed Product revision');
+            if (!operation.reason.trim() || !operation.evidenceRefs.length || operation.evidenceRefs.some(value => !value.trim()))
+                throw new Error('revision correction requires a reason and evidence');
+            handoff.productRevisionCorrections = [...(handoff.productRevisionCorrections ?? []), {
+                    from: operation.expectedFrom, to: operation.to, reason: operation.reason.trim(),
+                    evidenceRefs: [...operation.evidenceRefs], proposalId: approval.proposalId,
+                    revision: approval.revision, correctedAt: timestamp,
+                }];
+            handoff.productRevision = operation.to;
+            return commit(next, timestamp);
+        }
         case 'reopen_closure': return reopenClosure(snapshot, operation.realizationId, operation.reason, {
             ...(operation.decisionId ? { id: operation.decisionId } : {}),
             now: timestamp,
