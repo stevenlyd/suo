@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 
 const root = await mkdtemp(join(tmpdir(), 'suo-cli-'))
 const clone = await mkdtemp(join(tmpdir(), 'suo-cli-clone-'))
-const cli = resolve('dist/cli.js')
+const cli = process.env.SUO_TEST_CLI ?? resolve('dist/cli.js')
 const run = (project, ...args) => execFileSync(process.execPath, [cli, ...args, '--root', project], { encoding: 'utf8' })
 const contract = { objective: 'Original CLI objective', frozenBehavior: ['Original behavior'], scope: ['Feature'], nonGoals: ['Other features'], acceptance: [{ id: 'observable', text: 'Observable outcome' }] }
 try {

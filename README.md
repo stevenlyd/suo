@@ -22,6 +22,10 @@ Human
   → repo TypeScript (default) or Obsidian Vault (optional)
 ```
 
+## Install the skill and runtime
+
+Use the [native distribution guide](docs/distribution.md) for Codex, Claude Code, Cursor, Copilot CLI/VS Code, Gemini CLI, Hermes and Pi. One canonical skill is distributed through native manifests/catalogs. Host-managed skill updates and the Node CLI runtime are separate; verify `suo --version` matches the loaded skill before Product work. Repository channels are prepared without publishing to a public marketplace or registry.
+
 ## The loop
 
 ```text
@@ -284,7 +288,9 @@ The host Agent owns natural-language understanding, research, recommendations, a
 Requires Node.js 22.18+ and pnpm.
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+pnpm build
+pnpm distribution:generate
 pnpm check
 node dist/cli.js --help
 ```

@@ -1,7 +1,7 @@
 ---
 name: suo
 description: "Use when an idea needs one bounded Product decision."
-version: 0.3.0
+version: 0.4.0
 license: MIT
 compatibility: "Requires Node.js 22.18+ and the suo CLI."
 metadata:
@@ -14,6 +14,12 @@ prerequisites:
 # Suo 梭
 
 Suo is a portable, stateless Skill: the needle can work on a different project tomorrow. Product state lives in the selected knowledge base, never in the Skill, an account, a global active-project setting, or conversation memory. Re-read the project on every invocation.
+
+## Runtime readiness
+
+Before touching Product state, run `suo --version` using the user's selected CLI installation. Its version must match this skill's `version` frontmatter. If the command is missing, dependencies fail, or the versions differ, stop Product mutations and explain the setup needed. Do not silently install, upgrade, fall back to another executable, or assume a plugin manager installed Node dependencies.
+
+This skill is instructions; the separately installed `@stevenlyd/suo` runtime supplies the `suo` command. It requires Node.js 22.18+. A host-native plugin update can update instructions without updating that runtime. Use the reviewed runtime's absolute executable path if it is not on PATH; substitute that path wherever this skill says `suo`. Never refer to an assumed `src/cli.ts` inside a skill-only installation. Installation, verification, upgrade and rollback instructions are in [distribution documentation](https://github.com/stevenlyd/suo/blob/main/docs/distribution.md); select the documentation at the same reviewed Git revision as the installed skill.
 
 ## Human surface
 

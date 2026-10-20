@@ -29,6 +29,10 @@ try {
   explicitRoot = flag('--root')
   commandRoot = resolve(explicitRoot ?? '.')
   switch (command) {
+    case '--version':
+    case '-v':
+      console.log(JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version)
+      break
     case 'vault': await vaultCommand(); break
     case 'init': await initCommand(); break
     case 'next': await nextCommand(); break
@@ -248,6 +252,7 @@ function helpText(): string { return `Suo 梭 — A shuttle for thought.
 Human interaction happens through the Suo Agent Skill. This CLI is the deterministic local protocol used by agents and CI.
 
 Usage:
+  suo --version
   suo init [project-directory] --idea "I have an idea..." [--title <title>]
   suo next [--json]
   suo submit <submission.json|->
