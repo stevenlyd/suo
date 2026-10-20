@@ -45,6 +45,7 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe('TypeScript ontology authority', () => {
+  // These integration cases compile the authority repeatedly; hosted runners need more than 5s.
   it('keeps each frozen handoff after approved edits, refreezing and a clean source copy', async () => {
     const { root } = await populatedProject()
     const clone = await mkdtemp(join(tmpdir(), 'suo-clean-'))
@@ -81,7 +82,7 @@ describe('TypeScript ontology authority', () => {
       await rm(root, { recursive: true, force: true })
       await rm(clone, { recursive: true, force: true })
     }
-  })
+  }, 30_000)
 
   it('loads legacy repo-ts handoffs without backfilling current definitions', async () => {
     const { root, snapshot } = await populatedProject()
@@ -97,7 +98,7 @@ describe('TypeScript ontology authority', () => {
       expect(output).not.toContain(contract.objective)
       expect((await loadSnapshot(root)).handoffs[0]!.frozenDefinition).toBeUndefined()
     } finally { await rm(root, { recursive: true, force: true }) }
-  })
+  }, 30_000)
 
   it.each(['git', 'suo'])('initializes the exact target beneath an existing %s root', async (ancestorKind) => {
     const parent = await mkdtemp(join(tmpdir(), 'suo-init-boundary-'))
