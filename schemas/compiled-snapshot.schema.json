@@ -113,6 +113,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" }, "moduleId": { "$ref": "#/$defs/id" }, "revision": { "type": "integer", "minimum": 1 },
         "productRevision": { "type": "integer", "minimum": 0 }, "status": { "enum": ["current", "in_delivery", "stale", "closed"] },
+        "frozenDefinition": { "type": "object", "additionalProperties": false, "required": ["module", "decisions"], "properties": { "module": { "$ref": "#/$defs/module" }, "decisions": { "type": "array", "items": { "$ref": "#/$defs/decision" } } } },
         "decisionIds": { "type": "array", "items": { "$ref": "#/$defs/id" } }, "contractDigest": { "$ref": "#/$defs/nonEmpty" },
         "createdAt": { "$ref": "#/$defs/timestamp" }
       }

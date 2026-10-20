@@ -303,3 +303,13 @@ node dist/cli.js --help
 
 MIT
 
+
+### Frozen handoff compatibility (0.3.1)
+
+New freezes retain a `frozenDefinition` value in the existing handoff record: the module definition (including imported Markdown text and digest) and governing decisions at the instant of freezing. Repo-ts serializes this into the tracked handoff `.suo.ts` file; Vault retains it in its normal approved revision history. Keep these files with the project. Regenerating documents, changing current Markdown or definitions, and copying the tracked source to a clean checkout do not change the frozen body. Lifecycle status is still read from the current handoff record.
+
+The outer module/decision relationships remain typed imports. IDs inside the frozen value are historical data, not a second editable graph or references to current definitions. Do not edit frozen records to update Product definitions; approve a change and freeze a new handoff instead. The existing contract digest is checked against the saved value; it is not an authenticity signature and does not cover every display field.
+
+This is an optional additive field in compiled schema 2 / source schema 3, with no data migration or rewrite of past approvals. Older records remain readable. For a legacy Vault handoff, Suo checks its first appearance in verified history against the recorded digest. Because legacy digests did not cover titles or decision questions, those fields are displayed as stable IDs with a provenance notice. If no matching original snapshot exists (including legacy repo-ts records), the generated page preserves identity, revision, status and digest but explicitly marks historical content unavailable. It never substitutes the current contract, even if its digest matches.
+
+A digest cannot recover missing text. Trusted backups or Git-pinned original source/views may supply historical evidence for manual review; this update does not automatically import or invent that evidence. Earlier executables do not understand the new optional field: use 0.3.1 or newer once new handoffs have been frozen. Bundled `dist/` is rebuilt with this fix; no package publication or installation change is required by this source change.

@@ -1,4 +1,4 @@
-import { access, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, access, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -9,6 +9,7 @@ import {
   freezeModule,
   stageProposal,
 } from '../src/core.js'
+import { generateArtifacts } from '../src/render.js'
 import { loadAuthority, saveAuthority } from '../src/source.js'
 import { loadSnapshot, saveSnapshot } from '../src/store.js'
 import type { ModuleContract, SuoSnapshot } from '../src/model.js'
@@ -44,6 +45,60 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe('TypeScript ontology authority', () => {
+  it('keeps each frozen handoff after approved edits, refreezing and a clean source copy', async () => {
+    const { root } = await populatedProject()
+    const clone = await mkdtemp(join(tmpdir(), 'suo-clean-'))
+    try {
+      let snapshot = await loadSnapshot(root)
+      const apply = async (id: string, operations: import('../src/model.js').ProductOperation[]) => {
+        snapshot = approveProposal(stageProposal(snapshot, { kind: 'proposal', id, summary: id, operations }), id)
+        await saveSnapshot(snapshot, root)
+        snapshot = await loadSnapshot(root)
+      }
+      await apply('proposal:freeze', [
+        { type: 'freeze_module', moduleId: 'module:foundation' },
+        { type: 'freeze_module', moduleId: 'module:feature' },
+      ])
+      await generateArtifacts(snapshot, root)
+      const oldDigest = snapshot.handoffs.find(value => value.moduleId === 'module:foundation')!.contractDigest
+      await apply('proposal:change', [
+        { type: 'update_module', moduleId: 'module:foundation', patch: { title: 'Changed title', contract: { ...contract, objective: 'Changed objective' } } },
+        { type: 'freeze_module', moduleId: 'module:foundation' },
+        { type: 'freeze_module', moduleId: 'module:feature' },
+      ])
+      await cp(join(root, 'suo'), join(clone, 'suo'), { recursive: true })
+      const loaded = await loadSnapshot(clone)
+      await generateArtifacts(loaded, clone)
+      const view = (module: string, revision: number) => readFile(join(clone, `docs/suo/HANDOFFS/handoff_module_${module}_${revision}.md`), 'utf8')
+      expect(await view('foundation', 1)).toContain(contract.objective)
+      expect(await view('foundation', 1)).not.toContain('Changed')
+      expect(await view('foundation', 1)).toContain('Status: stale')
+      expect(await view('foundation', 1)).toContain(oldDigest)
+      expect(await view('foundation', 2)).toContain('Changed objective')
+      expect(await view('feature', 1)).toContain(contract.objective)
+      expect(await view('feature', 2)).not.toContain('Changed objective')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(clone, { recursive: true, force: true })
+    }
+  })
+
+  it('loads legacy repo-ts handoffs without backfilling current definitions', async () => {
+    const { root, snapshot } = await populatedProject()
+    try {
+      const legacy = freezeModule(snapshot, 'module:foundation')
+      delete legacy.handoffs[0]!.frozenDefinition
+      await saveAuthority(legacy, root)
+      const loaded = await loadSnapshot(root)
+      expect(loaded.handoffs[0]!.frozenDefinition).toBeUndefined()
+      await generateArtifacts(loaded, root)
+      const output = await readFile(join(root, 'docs/suo/HANDOFFS/handoff_module_foundation_1.md'), 'utf8')
+      expect(output).toContain('Historical content unavailable')
+      expect(output).not.toContain(contract.objective)
+      expect((await loadSnapshot(root)).handoffs[0]!.frozenDefinition).toBeUndefined()
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
   it.each(['git', 'suo'])('initializes the exact target beneath an existing %s root', async (ancestorKind) => {
     const parent = await mkdtemp(join(tmpdir(), 'suo-init-boundary-'))
     const root = join(parent, 'child')
@@ -205,6 +260,11 @@ describe('TypeScript ontology authority', () => {
     const changed = await loadAuthority(root)
     expect(changed.modules.find(value => value.id === 'module:feature')?.definitionStatus).toBe('shaping')
     expect(changed.handoffs.find(value => value.moduleId === 'module:feature')?.status).toBe('stale')
+    await saveAuthority(changed, root)
+    await generateArtifacts(await loadSnapshot(root), root)
+    const output = await readFile(join(root, 'docs/suo/HANDOFFS/handoff_module_feature_1.md'), 'utf8')
+    expect(output).toContain('First objective.')
+    expect(output).not.toContain('Changed objective.')
   })
 
   it('does not change authority when transient staging fails', async () => {

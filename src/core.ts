@@ -462,6 +462,20 @@ export function validateInvariants(snapshot: SuoSnapshot): string[] {
     const seen = new Set<string>()
     for (const value of values) seen.has(value.id) ? issues.push(`duplicate ${label} id: ${value.id}`) : seen.add(value.id)
   }
+  for (const handoff of snapshot.handoffs) {
+    const frozen = handoff.frozenDefinition
+    if (!frozen) continue // Legacy records remain readable without inventing history.
+    if (frozen.module.id !== handoff.moduleId ||
+        JSON.stringify(frozen.decisions.map(value => value.id).sort()) !== JSON.stringify([...handoff.decisionIds].sort()) ||
+        frozen.decisions.some(value => value.moduleId !== handoff.moduleId || !['approved', 'deferred'].includes(value.status)) ||
+        handoffDefinitionDigest({ ...snapshot, decisions: frozen.decisions }, frozen.module) !== handoff.contractDigest) {
+      issues.push(`frozen definition does not match handoff: ${handoff.id}`)
+    }
+    const objective = frozen.module.contract.objective
+    if (typeof objective !== 'string' && createHash('sha256').update(objective.content).digest('hex') !== objective.digest) {
+      issues.push(`frozen Markdown digest mismatch: ${handoff.id}`)
+    }
+  }
   const moduleIds = new Set(snapshot.modules.map(value => value.id))
   for (const module of snapshot.modules) for (const dependency of module.dependencies) if (!moduleIds.has(dependency)) issues.push(`unknown module dependency: ${module.id} -> ${dependency}`)
   const graph = moduleGraph(snapshot, false)
@@ -535,6 +549,7 @@ function createCurrentHandoff(snapshot: SuoSnapshot, module: ProductModule, time
     id: `handoff:${module.id}:${revision}`, moduleId: module.id, revision, productRevision: snapshot.revision + 1, status: 'current',
     decisionIds: snapshot.decisions.filter(value => value.moduleId === module.id && ['approved', 'deferred'].includes(value.status)).map(value => value.id).sort(),
     contractDigest: handoffDefinitionDigest(snapshot, module), createdAt: timestamp,
+    frozenDefinition: structuredClone({ module, decisions: snapshot.decisions.filter(value => value.moduleId === module.id && ['approved', 'deferred'].includes(value.status)) }),
   }
   snapshot.handoffs.push(handoff)
   return handoff
@@ -548,7 +563,7 @@ function invalidateModuleAndDownstream(snapshot: SuoSnapshot, moduleId: string):
   }
 }
 
-function handoffDefinitionDigest(snapshot: SuoSnapshot, module: ProductModule): string {
+export function handoffDefinitionDigest(snapshot: SuoSnapshot, module: ProductModule): string {
   const decisions = snapshot.decisions
     .filter(value => value.moduleId === module.id && ['approved', 'deferred'].includes(value.status))
     .sort((a, b) => a.id.localeCompare(b.id))

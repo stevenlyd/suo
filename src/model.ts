@@ -47,7 +47,12 @@ export interface Decision {
   createdAt: string
   updatedAt: string
 }
+export interface FrozenDefinition {
+  module: ProductModule
+  decisions: Decision[]
+}
 export interface Handoff {
+  frozenDefinition?: FrozenDefinition
   id: string
   moduleId: string
   revision: number

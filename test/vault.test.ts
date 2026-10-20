@@ -20,12 +20,13 @@ async function note(root: string, path = 'Feature.md'): Promise<string> {
   return adoptVaultNote(root, path, 'module')
 }
 async function approveNotes(root: string): Promise<SuoSnapshot> { return approveVaultDraft(root, (await readVaultDraft(root)).token) }
-async function operations(root: string, ops: ProductOperation[]): Promise<SuoSnapshot> {
+async function operations(root: string, ops: ProductOperation[], legacy = false): Promise<SuoSnapshot> {
   let snapshot = await loadSnapshot(root)
   const id = `proposal:test-${snapshot.revision}`
   snapshot = stageProposal(snapshot, { kind: 'proposal', id, summary: 'Reviewed test proposal', operations: ops })
   await saveSnapshot(snapshot, root)
   snapshot = approveProposal(await loadSnapshot(root), id)
+  if (legacy) for (const handoff of snapshot.handoffs) delete handoff.frozenDefinition
   await saveSnapshot(snapshot, root)
   return loadSnapshot(root)
 }
@@ -120,10 +121,10 @@ describe('stateless knowledge-store adapters', () => {
     }
   })
 
-  it('preserves frozen handoff content after a new approved definition', async () => {
+  it.each([false, true])('preserves frozen handoff content after a new approved definition (legacy=%s)', async (legacy) => {
     const root = await vault(), id = await note(root)
     await approveNotes(root)
-    let frozen = await operations(root, [{ type: 'update_module', moduleId: id, patch: { contract } }, { type: 'freeze_module', moduleId: id }])
+    let frozen = await operations(root, [{ type: 'update_module', moduleId: id, patch: { contract } }, { type: 'freeze_module', moduleId: id }], legacy)
     const originalRevision = frozen.revision, handoff = frozen.handoffs[0]!
     const path = join(root, 'Feature.md')
     await writeFile(path, (await readFile(path, 'utf8')).replace('Original objective', 'New objective'))
@@ -137,6 +138,22 @@ describe('stateless knowledge-store adapters', () => {
     expect(output).toContain('Original objective')
     expect(output).not.toContain('New objective')
     expect(output).toContain('Status: stale')
+  })
+
+  it('does not recover legacy content from later coincidentally matching definitions', async () => {
+    const root = await vault(), id = await note(root)
+    await approveNotes(root)
+    const frozen = await operations(root, [
+      { type: 'update_module', moduleId: id, patch: { contract } },
+      { type: 'freeze_module', moduleId: id },
+      { type: 'update_module', moduleId: id, patch: { contract: { ...contract, objective: 'Later objective' } } },
+    ], true)
+    await operations(root, [{ type: 'update_module', moduleId: id, patch: { title: 'Later title', contract } }])
+    await generateArtifacts(await loadSnapshot(root), root)
+    const output = await readFile(join(root, 'docs/suo/HANDOFFS', `${frozen.handoffs[0]!.id.replaceAll(':', '_')}.md`), 'utf8')
+    expect(output).toContain('Historical content unavailable')
+    expect(output).not.toContain('Original objective')
+    expect(output).not.toContain('Later title')
   })
 
   it('supports decision notes but requires reopening approved decisions before editing', async () => {
