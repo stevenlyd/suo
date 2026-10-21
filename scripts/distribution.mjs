@@ -8,7 +8,7 @@ export const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const json = value => `${JSON.stringify(value, null, 2)}\n`
 const hash = value => createHash('sha256').update(value).digest('hex')
 const skillPath = 'skills/suo/SKILL.md'
-export const packageFiles = ['dist', 'schemas', 'skills', 'scripts/distribution.mjs', 'docs/distribution.md', 'docs/testing/distribution.md', 'plugin.json', '.claude-plugin', '.agents/plugins', 'gemini-extension.json', 'distribution-lock.json', 'README.md', 'LICENSE', 'docs/validation-upgrade.md']
+export const packageFiles = ['dist', 'schemas', 'skills', 'scripts/distribution.mjs', 'docs/distribution.md', 'docs/testing/distribution.md', 'plugin.json', '.claude-plugin', '.agents/plugins', 'gemini-extension.json', 'distribution-lock.json', 'README.md', 'LICENSE', 'docs/validation-upgrade.md', 'docs/unit-runtime.md']
 const manifestPaths = ['plugin.json', '.claude-plugin/plugin.json', '.claude-plugin/marketplace.json', '.agents/plugins/marketplace.json', 'gemini-extension.json']
 export const validVersion = value => /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value)
 export function newerVersion(next, previous) {
@@ -29,12 +29,16 @@ function safePath(root, path) {
   return current
 }
 function walk(root, path) {
-  const full = safePath(root, path)
-  const stat = lstatSync(full)
-  if (stat.isFile()) return [path]
-  if (!stat.isDirectory()) throw new Error(`Not a regular package file: ${path}`)
-  return readdirSync(full).sort().flatMap(name => walk(root, `${path}/${name}`))
+  const stack = [path], files = []
+  while (stack.length) {
+    const current = stack.pop(), full = safePath(root, current), stat = lstatSync(full)
+    if (stat.isFile()) files.push(current)
+    else if (stat.isDirectory()) for (const name of readdirSync(full).sort().reverse()) stack.push(`${current}/${name}`)
+    else throw new Error(`Not a regular package file: ${current}`)
+  }
+  return files
 }
+
 function metadata(pkg) {
   const common = { name: 'suo', version: pkg.version, description: pkg.description }
   const identity = { author: pkg.author, repository: pkg.repository.url, license: pkg.license }
