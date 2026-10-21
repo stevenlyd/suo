@@ -66,6 +66,7 @@ export function renderHandoff(snapshot, handoff, historical) {
 - Handoff: \`${handoff.id}\` revision ${handoff.revision}
 - Product revision: ${handoff.productRevision}
 - Status: ${handoff.status}
+- Expected assignee: ${handoff.expectedAssignee ?? 'unspecified'} (assignment acceptance is not implied)
 - Contract digest: \`${handoff.contractDigest}\`
 ${corrections}
 ## Historical content unavailable
@@ -80,6 +81,7 @@ Recover the original approved source from a trusted backup or Git-pinned revisio
 - Handoff: \`${handoff.id}\` revision ${handoff.revision}
 - Product revision: ${handoff.productRevision}
 - Status: ${handoff.status}
+- Expected assignee: ${handoff.expectedAssignee ?? 'unspecified'} (assignment acceptance is not implied)
 - Contract digest: \`${handoff.contractDigest}\`
 ${corrections}${provenance}
 ## Product objective

@@ -1,7 +1,7 @@
 ---
 name: suo
 description: "Use when an idea needs one bounded Product decision."
-version: 0.4.1
+version: 0.5.0
 license: MIT
 compatibility: "Requires Node.js 22.18+ and the suo CLI."
 metadata:
@@ -63,6 +63,14 @@ The person talks naturally. Do not ask them to write JSON, remember entity IDs, 
 9. On return, submit a `kind: "closure"` envelope with the non-empty implementation-agent identity, implementation references, acceptance evidence, real check results, deviations, risks, and new Product questions.
 10. Show the closure evidence to the verifier. After explicit acceptance, call `suo approve <closure-id> --yes --verifier <name>`.
 11. Return the new `suo next --json` action.
+
+## Collaborating on independent features
+
+Use stable module/decision IDs for independently decidable outcomes, not branches or fixed people roles. “Keep replies and avatars, think more about Profile” authorizes only the bounded selected decisions; leave Profile experimental or pending. Keep experiment proposals distinct from official frozen behavior and approved decision history. Do not freeze an entire mixed experiment as the accepted contract. Multiple features may share implementation branches.
+
+Include `expectedRevision` from the just-inspected snapshot in proposal submissions. A mismatch stops submission; inspect the new authority and reconcile the actual decision. New bounded edits to existing independent modules may commute across unrelated approvals. Structural edits, dependencies and legacy proposals retain the global stale guard. Same-feature conflicts show proposal provenance; never silently choose a collaborator's decision or resubmit against a fresh revision without reviewing the changed meaning.
+
+A `freeze_module` operation may include `expectedAssignee`. This becomes durable handoff metadata, not assignment acceptance, work-start evidence, a fixed role, or deployment permission. Either Steven or Quinn can be the expected assignee. Deliver the exact handoff, accepted scope, rationale, dependencies and unresolved questions. Keep live-user acceptance separate from product agreement; an external implementation agent still cannot accept its own closure.
 
 ## Rejection and change
 

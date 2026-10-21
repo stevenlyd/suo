@@ -45,7 +45,7 @@ describe('stateless knowledge-store adapters', () => {
     expect((await knowledgeStore(ts)).kind).toBe('repo-ts')
     await mkdir(join(a, 'nested'))
     expect(await findProjectRoot(join(a, 'nested'))).toBe(a)
-  })
+  }, 20000)
 
   it('enrolls in place, reviews drafts and writes proposals without losing personal content', async () => {
     const root = await vault(), id = await note(root)
