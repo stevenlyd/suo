@@ -11,7 +11,7 @@ const emit=(value:unknown)=>process.stdout.write(JSON.stringify(value,null,2)+'\
 const args=process.argv.slice(2)
 function option(name:string,fallback?:string):string|undefined{const i=args.indexOf(name);if(i<0)return fallback;const value=args[i+1];if(!value||value.startsWith('--'))throw new Error(`missing ${name}`);args.splice(i,2);return value}
 async function main(){
- if(args.includes('--version')){console.log('0.8.0');return}
+ if(args.includes('--version')){console.log('0.8.1');return}
  const root=resolve(option('--root',process.cwd())!),target=option('--target','commit'),ref=option('--ref','HEAD')!
  if(!['commit','index','working-tree'].includes(target!))throw new Error('target must be commit, index or working-tree')
  const command=args.shift()??'help'
