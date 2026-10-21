@@ -10,11 +10,12 @@ import { arrayField, authored, enrollNote, equal, hash, noteContent, parseNote, 
 import type { VaultNote } from './vault-notes.js'
 
 export const vaultMarker = 'suo.vault.json'
-const historyDirectory = 'suo-history'
-const journalPath = `${historyDirectory}/transaction.json`
-interface Revision { format: 1; previous: string | null; snapshot: SuoSnapshot; digest: string }
+const stateDirectory = 'suo-state'
+const statePath = `${stateDirectory}/current.json`
+const journalPath = `${stateDirectory}/transaction.json`
+interface CurrentState { format: 2; snapshot: SuoSnapshot; digest: string }
 interface Write { path: string; before: string | null; after: string }
-interface Journal { format: 1; revision: number; record: Revision; writes: Write[] }
+interface Journal { format: 2; before: string | null; record: CurrentState; writes: Write[] }
 export interface VaultDraft {
   snapshot: SuoSnapshot
   approved: SuoSnapshot
@@ -23,13 +24,13 @@ export interface VaultDraft {
   changed: boolean
   before: unknown
   after: unknown
-  head: Revision
+  head: CurrentState
 }
 export async function isVault(root: string): Promise<boolean> {
   const marker = await optionalRead(await safePath(root, vaultMarker))
   if (marker === null) return false
   const config = JSON.parse(marker) as { format?: number; adapter?: string }
-  if (config.format !== 1 || config.adapter !== 'obsidian') throw new Error('unsupported Suo knowledge-store configuration')
+  if (config.format !== 2 || config.adapter !== 'obsidian') throw new Error('unsupported Suo knowledge-store configuration')
   if (await optionalRead(join(root, 'suo/product.suo.ts')) !== null) throw new Error('ambiguous authority: both repo-ts and obsidian are configured')
   return true
 }
@@ -37,16 +38,16 @@ export async function initVault(root: string, idea: string, title?: string): Pro
   await mkdir(root, { recursive: true })
   root = await realpath(root)
   if (await optionalRead(join(root, vaultMarker)) !== null || await optionalRead(join(root, 'suo/product.suo.ts')) !== null) throw new Error('Suo is already initialized here')
-  if (await exists(join(root, historyDirectory))) throw new Error('existing suo-history must be recovered, not overwritten')
-  if ((await readNotes(root)).length) throw new Error('existing enrolled notes require their original history; initialization cannot replace it')
+  if (await exists(join(root, stateDirectory))) throw new Error('existing suo-state must be recovered, not overwritten')
+  if ((await readNotes(root)).length) throw new Error('existing enrolled notes require their current state; initialization cannot replace it')
   const snapshot = createProduct({ title: title ?? idea.trim().split(/\s+/).slice(0, 8).join(' '), idea })
   const notePath = 'Suo Product.md'
   if (await exists(join(root, notePath))) throw new Error(`${notePath} already exists`)
   await withProjectLock(root, async () => {
-    const record = makeRevision(snapshot, null)
+    const record = makeCurrent(snapshot)
     await transact(root, record, [
       { path: notePath, before: null, after: renderNote(undefined, 'product', snapshot.product, new Map()) },
-      { path: vaultMarker, before: null, after: `${JSON.stringify({ format: 1, adapter: 'obsidian' }, null, 2)}\n` },
+      { path: vaultMarker, before: null, after: `${JSON.stringify({ format: 2, adapter: 'obsidian' }, null, 2)}\n` },
     ])
   })
   const ignorePath = await safePath(root, '.gitignore')
@@ -60,7 +61,7 @@ export async function adoptVaultNote(root: string, path: string, kind: 'module' 
     await ensureNoJournal(root)
     const actual = await safePath(root, path)
     const local = relative(root, actual).split(sep).join('/')
-    if (!local.endsWith('.md') || local.split('/').some(p => p.startsWith('.') || p === 'node_modules' || p === historyDirectory) || local.startsWith('docs/suo/')) throw new Error('enroll a Markdown note in a scanned Vault directory')
+    if (!local.endsWith('.md') || local.split('/').some(p => p.startsWith('.') || p === 'node_modules' || p === stateDirectory) || local.startsWith('docs/suo/')) throw new Error('enroll a Markdown note in a scanned Vault directory')
     const before = await readFile(actual, 'utf8')
     const id = `${kind}:${randomUUID()}`
     const after = enrollNote(before, id, kind, basename(actual, '.md'), moduleLink)
@@ -74,8 +75,7 @@ export async function adoptVaultNote(root: string, path: string, kind: 'module' 
 export async function readVaultDraft(root: string): Promise<VaultDraft> {
   await requireVault(root)
   await ensureNoJournal(root)
-  const history = await readVaultHistory(root)
-  const head = history.at(-1)!
+  const head = await readVaultCurrent(root)
   const approved = head.snapshot
   const notes = await readNotes(root)
   const products = notes.filter(n => n.kind === 'product')
@@ -97,7 +97,7 @@ export async function readVaultDraft(root: string): Promise<VaultDraft> {
       id: note.id, title: stringField(note, 'suo_title'), phase: stringField(note, 'suo_phase', snapshot.product.activeSlice),
       definitionStatus: old?.definitionStatus ?? 'candidate',
       dependencies: arrayField<unknown>(note, 'suo_dependencies').map(link => resolveLink(notes, note, link, 'module')).sort(),
-      contract: { objective: noteContent(note), frozenBehavior: arrayField(note, 'suo_frozen_behavior'), scope: arrayField(note, 'suo_scope'), nonGoals: arrayField(note, 'suo_non_goals'), acceptance: arrayField(note, 'suo_acceptance'), requiredChecks: arrayField(note, 'suo_required_checks'), checkRationale: note.document.get('suo_check_rationale') as string },
+      contract: { objective: noteContent(note), frozenBehavior: arrayField(note, 'suo_frozen_behavior'), scope: arrayField(note, 'suo_scope'), nonGoals: arrayField(note, 'suo_non_goals'), acceptance: arrayField(note, 'suo_acceptance'), requiredChecks: note.document.get('suo_required_checks') === null ? null : arrayField(note, 'suo_required_checks'), checkRationale: note.document.get('suo_check_rationale') as string | null },
       createdAt: old?.createdAt ?? timestamp, updatedAt: old?.updatedAt ?? timestamp,
     }
     if (!old) snapshot.modules.push(module)
@@ -123,7 +123,6 @@ export async function readVaultDraft(root: string): Promise<VaultDraft> {
     }
     if (!old) snapshot.decisions.push(decision)
     else if (!equal(old, decision)) {
-      if (!['open', 'proposed'].includes(old.status)) throw new Error(`${note.path}: approved/deferred decisions must be reopened through a proposal before editing`)
       if (old.moduleId !== decision.moduleId) throw new Error(`${note.path}: decision ownership cannot be reassigned`)
       snapshot.decisions[snapshot.decisions.findIndex(d => d.id === old.id)] = decision
     }
@@ -166,7 +165,7 @@ export async function approveVaultDraft(root: string, token: string): Promise<Su
     }
     assertValidSnapshot(next)
     await verifyDraft(root, draft.token)
-    await transact(root, makeRevision(next, draft.head.digest), [])
+    await transact(root, makeCurrent(next), [])
     return next
   })
 }
@@ -201,43 +200,36 @@ export async function saveVaultAuthority(snapshot: SuoSnapshot, root: string): P
   }
   assertValidSnapshot(snapshot)
   await verifyDraft(root, draft.token)
-  await transact(root, makeRevision(snapshot, draft.head.digest), writes)
+  await transact(root, makeCurrent(snapshot), writes)
 }
-export async function readVaultHistory(root: string): Promise<Revision[]> {
-  await safePath(root, historyDirectory)
-  const files = (await readdir(join(root, historyDirectory))).filter(p => p.endsWith('.json') && p !== 'transaction.json').sort()
-  if (!files.length) throw new Error('missing durable Vault history; restore from backup')
-  const records: Revision[] = []
-  for (const [index, file] of files.entries()) {
-    if (file !== revisionName(index)) throw new Error('Vault history has a gap or unexpected revision')
-    const record = JSON.parse(await readFile(await safePath(root, `${historyDirectory}/${file}`), 'utf8')) as Revision
-    assertValidSnapshot(record.snapshot)
-    const expected = makeRevision(record.snapshot, records.at(-1)?.digest ?? null)
-    if (!equal(record, expected) || record.snapshot.revision !== index) throw new Error(`Vault history integrity error: ${file}`)
-    records.push(record)
-  }
-  return records
+export async function readVaultCurrent(root: string): Promise<CurrentState> {
+  const raw = await optionalRead(await safePath(root, statePath))
+  if (raw === null) throw new Error('missing current Vault state; restore the current files from Git or backup')
+  const record = JSON.parse(raw) as CurrentState
+  assertValidSnapshot(record.snapshot)
+  if (!equal(record, makeCurrent(record.snapshot))) throw new Error('invalid current Vault state digest')
+  return record
 }
-function makeRevision(snapshot: SuoSnapshot, previous: string | null): Revision {
-  const payload = { format: 1 as const, previous, snapshot }
+function makeCurrent(snapshot: SuoSnapshot): CurrentState {
+  const payload = { format: 2 as const, snapshot }
   return { ...payload, digest: hash(JSON.stringify(payload)) }
 }
-const revisionName = (revision: number): string => `${revision.toString().padStart(10, '0')}.json`
-async function transact(root: string, record: Revision, writes: Write[]): Promise<void> {
-  await safePath(root, historyDirectory)
-  await mkdir(join(root, historyDirectory), { recursive: true })
+async function transact(root: string, record: CurrentState, writes: Write[]): Promise<void> {
+  await safePath(root, stateDirectory)
+  await mkdir(join(root, stateDirectory), { recursive: true })
   await ensureNoJournal(root)
   for (const write of writes) if (await optionalRead(await safePath(root, write.path)) !== write.before) throw new Error(`concurrent edit: ${write.path}`)
-  const journal: Journal = { format: 1, revision: record.snapshot.revision, record, writes }
+  const before = await optionalRead(await safePath(root, statePath))
+  const journal: Journal = { format: 2, before, record, writes }
   await writeFile(join(root, journalPath), `${JSON.stringify(journal, null, 2)}\n`, { flag: 'wx' })
-  // A durable journal remains on any failure. Recovery never overwrites a third-party edit.
   for (const write of writes) {
     const path = await safePath(root, write.path)
     if (await optionalRead(path) !== write.before) throw new Error(`concurrent edit: ${write.path}; run suo vault recover`)
     await mkdir(dirname(path), { recursive: true })
     await atomicWrite(path, write.after)
   }
-  await writeFile(join(root, historyDirectory, revisionName(record.snapshot.revision)), `${JSON.stringify(record, null, 2)}\n`, { flag: 'wx' })
+  if (await optionalRead(await safePath(root, statePath)) !== before) throw new Error('concurrent Vault state edit; run suo vault recover')
+  await atomicWrite(join(root, statePath), `${JSON.stringify(record, null, 2)}\n`)
   await rm(join(root, journalPath))
 }
 export async function recoverVault(root: string): Promise<string> {
@@ -245,21 +237,23 @@ export async function recoverVault(root: string): Promise<string> {
     const raw = await optionalRead(await safePath(root, journalPath))
     if (raw === null) return 'No interrupted transaction.'
     const journal = JSON.parse(raw) as Journal
-    if (journal.format !== 1 || !Array.isArray(journal.writes) || journal.revision !== journal.record.snapshot.revision || !equal(journal.record, makeRevision(journal.record.snapshot, journal.record.previous))) throw new Error('invalid transaction journal')
-    const committed = await optionalRead(await safePath(root, `${historyDirectory}/${revisionName(journal.revision)}`))
-    if (committed !== null && !equal(JSON.parse(committed), journal.record)) throw new Error('transaction history conflict')
+    if (journal.format !== 2 || !Array.isArray(journal.writes) || !equal(journal.record, makeCurrent(journal.record.snapshot))) throw new Error('invalid transaction journal')
+    assertValidSnapshot(journal.record.snapshot)
+    const currentState = await optionalRead(await safePath(root, statePath))
+    const committed = currentState !== null && equal(JSON.parse(currentState), journal.record)
+    if (!committed && currentState !== journal.before) throw new Error('transaction current-state conflict')
     for (const write of journal.writes) {
       const current = await optionalRead(await safePath(root, write.path))
       if (current !== write.before && current !== write.after) throw new Error(`recovery conflict: preserve and resolve ${write.path} before retrying`)
-      if (committed !== null && current !== write.after) throw new Error(`committed transaction has an externally changed note: ${write.path}`)
+      if (committed && current !== write.after) throw new Error(`committed transaction has an externally changed note: ${write.path}`)
     }
-    if (committed === null) for (const write of [...journal.writes].reverse()) {
+    if (!committed) for (const write of [...journal.writes].reverse()) {
       const path = await safePath(root, write.path)
       if (write.before === null) await rm(path, { force: true })
       else await atomicWrite(path, write.before)
     }
     await rm(join(root, journalPath))
-    return committed === null ? 'Rolled back interrupted note writes; original notes preserved.' : 'Completed committed transaction cleanup.'
+    return !committed ? 'Rolled back interrupted note writes; original notes preserved.' : 'Completed committed transaction cleanup.'
   })
 }
 async function verifyDraft(root: string, token: string): Promise<void> {

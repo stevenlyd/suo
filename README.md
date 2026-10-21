@@ -34,7 +34,7 @@ Use the [native distribution guide](docs/distribution.md) for Codex, Claude Code
 → agent proposal
 → explicit owner approval
 → knowledge-store commit
-→ frozen handoff
+→ current handoff
 → external implementation
 → evidence-backed closure
 → verifier approval
@@ -156,7 +156,7 @@ suo approve proposal:intake --yes
 
 Set the example’s `expectedRevision` to the revision actually inspected and reviewed for this submission. The numbered examples assume a fresh project and sequential approvals.
 
-Submission JSON is only a protocol envelope staged under `.suo/`; it is not Product authority. Approval checks the proposal base digest, applies the change through the project’s adapter, validates the model, and regenerates `docs/suo/`. The TS adapter updates imported source files; the Obsidian adapter updates enrolled notes and appends a durable revision record.
+Submission JSON is only a protocol envelope staged under `.suo/`; it is not Product authority. Approval checks the proposal base digest, applies the change through the project’s adapter, validates the model, and regenerates `docs/suo/`. The TS adapter updates imported source files; the Obsidian adapter updates enrolled notes and atomically replaces its current state.
 
 Reject instead:
 
@@ -236,7 +236,7 @@ Product properties: `suo_title`, `suo_slice`, `suo_profile`; content region: ide
 
 Real application validation: [Obsidian 1.14.4 on Linux](docs/testing/obsidian-1.14.4/README.md), including screenshots and reproducible desktop scripts. Native Properties displays nested acceptance data as JSON; save editor changes before asking Suo to review them.
 
-### Working notes and approved versions
+### Working notes and current definitions
 
 - `suo vault check` validates the working notes and generates disposable TS at `.suo/compiled/suo/`. It does not approve anything.
 - `suo vault diff` returns authored before/after values and a review digest bound to the current revision and exact enrolled note contents.
@@ -253,16 +253,13 @@ my-vault/
 ├── Projects/*.md          enrolled notes alongside ordinary knowledge
 ├── Suo Product.md         initial product note; may be renamed
 ├── Suo/*.md               new nodes created by approved Agent proposals
-├── suo-history/*.json     durable approved revisions and lifecycle records
+├── suo-state/current.json  current lifecycle state
 ├── docs/suo/              generated reading views
 └── .suo/                  disposable TS/cache and local pending submissions
 ```
 
-Back up and sync **notes, the marker, and `suo-history/` together**. History is machine-managed and must not be edited or discarded. It records approvals and exact historical versions; it is not another definition for the user to maintain. Hash chaining catches inconsistent history, not malicious rewriting of the whole archive. `.suo/` may be removed, losing only cache and unapproved staged proposals.
+Back up and sync **notes, the marker, and `suo-state/current.json` together**. Git or the user's backup system owns prior versions. Suo does not require a continuous history chain. Its temporary durable transaction journal supports crash recovery and rejects conflicting outside edits; use `suo vault recover --root <directory>` after resolving the reported conflict. Never delete a pending transaction to pretend a write succeeded.
 
-A durable transaction journal blocks normal operations after an interrupted write. `suo vault recover --root <directory>` rolls back uncommitted note writes or finishes cleanup of an already committed revision. It refuses to overwrite external edits. After a process crash, first verify no Suo writer is running before removing a leftover `.suo/write.lock`, then run recovery. Do not delete history to clear an error. Initialization recovery may leave an empty `suo-history/` directory; inspect and remove that empty directory before retrying initialization.
-
-The first adapter supports one product per project root, local files, and explicit content regions. Native heading/block bindings (including imported `MarkdownDocument` objectives in proposals), rich evidence nodes, legacy TS migration, multi-product membership within one Vault, and the Obsidian sidebar/UI plugin are future work. Symlink enrollment is unsupported. There is no lossless legacy TS-to-Vault migration claim.
 
 ## Use the same Skill on another project
 
@@ -284,7 +281,7 @@ The kernel owns:
 - proposal staging and stale-base detection;
 - explicit owner approval;
 - deterministic frontier selection;
-- versioned handoffs;
+- current handoffs bound to definition digests;
 - closure evidence validation;
 - downstream stale propagation;
 - checked filesystem commits.
@@ -318,20 +315,13 @@ node dist/cli.js --help
 MIT
 
 
-### Frozen handoff compatibility (0.3.1)
 
-New freezes retain a `frozenDefinition` value in the existing handoff record: the module definition (including imported Markdown text and digest) and governing decisions at the instant of freezing. Repo-ts serializes this into the tracked handoff `.suo.ts` file; Vault retains it in its normal approved revision history. Keep these files with the project. Regenerating documents, changing current Markdown or definitions, and copying the tracked source to a clean checkout do not change the frozen body. Lifecycle status is still read from the current handoff record.
+## Current-state model (0.7)
 
-The outer module/decision relationships remain typed imports. IDs inside the frozen value are historical data, not a second editable graph or references to current definitions. Do not edit frozen records to update Product definitions; approve a change and freeze a new handoff instead. The existing contract digest is checked against the saved value; it is not an authenticity signature and does not cover every display field.
+Suo holds current goals, scope, relevant decisions, unresolved questions, dependencies, a current handoff and actual delivery evidence. Definitions can be replaced under authorized intent. There is no decided-proposal ledger, per-generation frozen definition or Product revision correction chain. Git holds older states. `revision` is a local optimistic concurrency token only.
 
-Since 0.6.0, frozen definitions and the strict acceptance/check fields are mandatory. Incomplete historical records are blocked until explicitly completed from real evidence and reviewed decisions. See [validation and upgrade policy](docs/validation-upgrade.md); raw historical data remains audit material, not validated current authority.
+A handoff names a stable module and a digest of its current definition and transitive prerequisites. Closure submissions supply that `definitionDigest` plus exact implementation revisions. Definition changes invalidate old evidence, including accepted closures; stale evidence remains readable and cannot assert current acceptance or block editing the definition. A new observation timestamp does not repair an identity mismatch.
 
-### Product revision provenance (0.4.1)
+Check policy can be explicitly undecided (`requiredChecks: null`, `checkRationale: null`). This is valid current shaping state and blocks freeze/acceptance. It does not mean no checks are required. A defined empty set needs an explicit rationale. No migration invents policy, evidence or approval.
 
-`SuoSnapshot.revision` counts committed Product transitions on that authority lineage. Staging and projection/compile/export do not commit a new revision. One approved proposal commits once, regardless of its number of operations. `Handoff.revision` is a separate per-module handoff sequence; `Handoff.productRevision` identifies the Product commit that created that handoff. All handoffs frozen in one proposal therefore share its final Product revision, even if a module freezes more than once in that batch. Standalone kernel mutations each commit once.
-
-Before 0.4.1, batch operations incremented temporary counters and froze those values into handoffs, then reset only the enclosing Product revision to `base + 1`. This could produce nonexistent future provenance such as Product revision 25 with handoff productRevision 52/53. Both stores preserved the kernel error; conversion is not a separate event counter. Existing/imported records are not automatically renumbered: an imported branch may have a distinct revision lineage, and a suspicious number alone does not prove its correct replacement.
-
-For a proven historical metadata error, submit an explicitly reviewed `correct_handoff_product_revision` proposal operation with `handoffId`, `expectedFrom`, `to`, `reason` and nonempty `evidenceRefs` pointing to fixed historical evidence. Approve through the normal protocol only with owner authorization. The operation requires a previously committed handoff, checks the expected old value, and appends `productRevisionCorrections` containing the original/replacement values, correction commit/time, proposal ID and evidence. It changes no contract, digest, handoff sequence, original creation timestamp, lifecycle status or old approval. This is an audited correction, not a new freeze or a claim of recovered historical content. The new Product commit records the correction; the corrected `productRevision` still points to the original creation commit. Review the evidence independently: Suo cannot infer its truth from a URL.
-
-The correction audit travels with typed authority and is preserved in append-only Vault history. Strict validation applies before correction; invalid historical input requires the explicit completion workflow rather than a bypass. No live project migration is included.
+See [current-state upgrade instructions](docs/validation-upgrade.md). The closure example's zero digest is a placeholder: replace it with the inspected current handoff digest and real evidence before submission.

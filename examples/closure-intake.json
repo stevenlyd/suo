@@ -1,7 +1,7 @@
 {
   "kind": "closure",
   "id": "closure:intake",
-  "handoffId": "handoff:module:intake:1",
+  "handoffId": "handoff:module:intake",
   "agent": "external-agent",
   "submission": {
     "implementationRefs": [
@@ -43,6 +43,6 @@
     "deviations": [],
     "residualRisks": [],
     "newProductQuestions": [],
-    "handoffRevision": 1
+    "definitionDigest": "0000000000000000000000000000000000000000000000000000000000000000"
   }
 }
