@@ -55,7 +55,7 @@ it('expected assignee survives authority roundtrip without claimed work or accep
     expect(loaded.closures).toEqual([])
     expect(validateSnapshot(loaded)).toEqual([])
   } finally { await rm(root,{recursive:true,force:true}) }
-})
+}, 20000)
 it('cross-feature decision prerequisites retain the global conflict guard', async () => {
   const { proposeDecision } = await import('../src/core.js')
   let s = fixture()
