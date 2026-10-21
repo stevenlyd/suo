@@ -22,3 +22,7 @@ Default reads inspect committed HEAD. Index and working-tree candidates are expl
 - [Distribution testing](docs/testing/distribution.md)
 
 Run `pnpm check`, `node test/cli-e2e.mjs`, `pnpm test:package` and `pnpm benchmark:units`. Benchmarks report measurements, not a claim that explicit stacks always outperform recursion.
+
+## Releases
+
+See [CHANGELOG.md](CHANGELOG.md) for versioned behavior, breaking changes and migration guidance, and [the release process](docs/releases.md) for validation and publishing.

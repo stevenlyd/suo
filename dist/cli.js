@@ -13,7 +13,7 @@ function option(name, fallback) { const i = args.indexOf(name); if (i < 0)
     throw new Error(`missing ${name}`); args.splice(i, 2); return value; }
 async function main() {
     if (args.includes('--version')) {
-        console.log('0.8.1');
+        console.log(JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version);
         return;
     }
     const root = resolve(option('--root', process.cwd())), target = option('--target', 'commit'), ref = option('--ref', 'HEAD');
