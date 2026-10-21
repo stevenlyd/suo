@@ -1,6 +1,6 @@
 {
   "name": "@stevenlyd/suo",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A shuttle for thought: one decision at a time, into form.",
   "type": "module",
   "private": true,
@@ -28,7 +28,8 @@
     "distribution-lock.json",
     "README.md",
     "LICENSE",
-    "docs/validation-upgrade.md"
+    "docs/validation-upgrade.md",
+    "docs/unit-runtime.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -38,7 +39,8 @@
     "prepack": "npm run distribution:check",
     "distribution:generate": "node scripts/distribution.mjs --write",
     "distribution:check": "node scripts/distribution.mjs --check",
-    "test:package": "node test/package-e2e.mjs"
+    "test:package": "node test/package-e2e.mjs",
+    "benchmark:units": "node scripts/benchmark-units.mjs"
   },
   "pi": {
     "skills": [

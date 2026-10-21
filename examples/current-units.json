@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 5,
+  "product": {
+    "id": "product",
+    "title": "Example"
+  },
+  "units": [
+    {
+      "id": "unit:example",
+      "title": "Example",
+      "labels": [],
+      "expectedAssignee": null,
+      "definition": {
+        "objective": "Define independently scoped behavior",
+        "included": [
+          "Example"
+        ],
+        "behavior": [
+          "Describe observable behavior"
+        ],
+        "exclusions": [],
+        "scope": "bounded",
+        "decision": "proposed",
+        "criteria": [
+          {
+            "id": "observable",
+            "text": "Describe the expected outcome"
+          }
+        ],
+        "ownObligations": null,
+        "ownRationale": null,
+        "checks": null,
+        "checkRationale": null,
+        "constraints": []
+      },
+      "implementation": {
+        "state": "unknown",
+        "definitionDigest": null,
+        "inputDigest": null,
+        "coverage": [],
+        "gaps": []
+      },
+      "documents": []
+    }
+  ],
+  "decisions": [],
+  "containment": [],
+  "dependencies": [],
+  "inputPolicy": {
+    "nonRuntimePaths": [],
+    "rationale": "Conservative repository inputs"
+  }
+}

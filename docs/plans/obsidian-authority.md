@@ -1,3 +1,5 @@
+> Historical design context. Schema 5 runtime/skill and docs/unit-runtime.md supersede authority and lifecycle details below.
+
 # Obsidian current-state adapter
 
 Enrolled notes contain authored definitions and explicit typed links. `suo-state/current.json` holds current approved lifecycle state. Generated TS is disposable IR. Git or the user's backup owns previous versions; there is no required history chain.
