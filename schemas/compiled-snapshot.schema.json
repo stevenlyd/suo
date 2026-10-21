@@ -899,7 +899,8 @@
           }
         },
         "contractDigest": {
-          "$ref": "#/$defs/nonEmpty"
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
         },
         "createdAt": {
           "$ref": "#/$defs/timestamp"

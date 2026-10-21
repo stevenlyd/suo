@@ -43,3 +43,11 @@ it('invalidates accepted evidence through cross-module decision prerequisites',(
  const next=reopenDecision(s,'du')
  expect(next.closures[0]!.status).toBe('stale');expect(next.handoffs[0]!.status).toBe('stale');expect(validateSnapshot(next)).toEqual([])
 })
+
+it('does not accept a current handoff with an unresolved decision or changed readiness',()=>{
+ const old=accepted(), raw=structuredClone(old)
+ raw.modules[0]!.definitionStatus='shaping'
+ expect(validateSnapshot(raw).join()).toContain('not definition-ready')
+ const reconciled=reconcileImportedAuthority(raw)
+ expect(reconciled.closures[0]!.status).toBe('stale');expect(validateSnapshot(reconciled)).toEqual([])
+})

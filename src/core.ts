@@ -493,6 +493,11 @@ export function validateInvariants(snapshot: SuoSnapshot): string[] {
   for (const handoff of snapshot.handoffs) {
     if (!snapshot.modules.some(value => value.id === handoff.moduleId)) issues.push(`unknown handoff module: ${handoff.id}`)
     unique(handoff.decisionIds, `handoff decision: ${handoff.id}`)
+    if (handoff.status !== 'stale') {
+      const module = snapshot.modules.find(value => value.id === handoff.moduleId)
+      const governing = snapshot.decisions.filter(value => value.moduleId === handoff.moduleId && ['approved','deferred'].includes(value.status)).map(value => value.id).sort()
+      if (!module || module.definitionStatus !== 'frozen' || module.dependencies.some(id => snapshot.modules.find(value => value.id === id)?.definitionStatus !== 'frozen') || snapshot.decisions.some(value => value.moduleId === handoff.moduleId && ['open','proposed'].includes(value.status)) || canonicalJson([...handoff.decisionIds].sort()) !== canonicalJson(governing)) issues.push(`handoff is not definition-ready: ${handoff.id}`)
+    }
     for (const decisionId of handoff.decisionIds) if (!snapshot.decisions.some(value => value.id === decisionId && value.moduleId === handoff.moduleId)) issues.push(`handoff decision belongs to another module or is unknown: ${handoff.id}/${decisionId}`)
     if (snapshot.modules.some(value => value.id === handoff.moduleId) && handoff.status !== 'stale' && handoff.contractDigest !== handoffDefinitionDigest(snapshot, requireModule(snapshot, handoff.moduleId))) issues.push(`handoff definition is not current: ${handoff.id}`)
   }
@@ -573,7 +578,7 @@ export function reconcileImportedAuthority(snapshot: SuoSnapshot): SuoSnapshot {
   const next = structuredClone(snapshot)
   const changedModules = new Set(next.handoffs
     .filter(value => value.status !== 'stale')
-    .filter(value => value.contractDigest !== handoffDefinitionDigest(next, requireModule(next, value.moduleId)))
+    .filter(value => { const module = requireModule(next, value.moduleId); return module.definitionStatus !== 'frozen' || module.dependencies.some(id => next.modules.find(dependency => dependency.id === id)?.definitionStatus !== 'frozen') || value.contractDigest !== handoffDefinitionDigest(next, module) })
     .map(value => value.moduleId))
   for (const moduleId of changedModules) {
     invalidateModuleAndDownstream(next, moduleId)
