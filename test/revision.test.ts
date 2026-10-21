@@ -10,7 +10,7 @@ import { compileVault, initVault, readVaultHistory } from '../src/vault.js'
 import { validateSnapshot } from '../src/validation.js'
 import type { ProductOperation, SuoSnapshot } from '../src/model.js'
 
-const contract = { objective: 'Feature', frozenBehavior: ['Behavior'], scope: ['Scope'], nonGoals: ['Other'], acceptance: [{ id: 'a', text: 'Works' }] }
+const contract = { objective: 'Feature', frozenBehavior: ['Behavior'], scope: ['Scope'], nonGoals: ['Other'], requiredChecks: [], checkRationale: 'Manual observation suffices for this fixture.', acceptance: [{ id: 'a', text: 'Works' }] }
 const setup: ProductOperation[] = [
   { type: 'create_module', module: { id: 'a', title: 'A', contract } },
   { type: 'create_module', module: { id: 'b', title: 'B', contract } },
@@ -21,7 +21,7 @@ const setup: ProductOperation[] = [
 ]
 function approve(snapshot: SuoSnapshot, operations: ProductOperation[]) {
   const id = `p:${snapshot.revision}`
-  return approveProposal(stageProposal(snapshot, { kind: 'proposal', id, summary: 'Reviewed changes', operations }), id)
+  return approveProposal(stageProposal(snapshot, { expectedRevision: snapshot.revision, kind: 'proposal', id, summary: 'Reviewed changes', operations }), id)
 }
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
@@ -54,11 +54,8 @@ it('preserves standalone commits and pre-existing imported/legacy provenance wit
   const direct = freezeModule(createModule(createProduct({ title: 'T', idea: 'I' }), { id: 'a', title: 'A', contract }), 'a')
   expect(direct.handoffs[0]!.productRevision).toBe(direct.revision)
   direct.handoffs[0]!.productRevision = 99
-  delete direct.handoffs[0]!.frozenDefinition
-  const next = approve(direct, [{ type: 'create_module', module: { id: 'b', title: 'B', contract } }, { type: 'freeze_module', moduleId: 'b' }])
-  expect(next.handoffs[0]).toEqual(direct.handoffs[0])
-  expect(next.handoffs[1]!.productRevision).toBe(next.revision)
-  expect(validateSnapshot(next)).toEqual([])
+  Reflect.deleteProperty(direct.handoffs[0]!, 'frozenDefinition')
+  expect(() => approve(direct, [{ type: 'freeze_module', moduleId: 'a' }])).toThrow('invalid Suo snapshot')
 })
 
 it('round-trips repeated approvals through Vault history, compiled TS and repo-ts without renumbering', async () => {
@@ -95,13 +92,12 @@ it('records explicit corrections without changing frozen semantics or prior Vaul
   const root = await temporary(), repo = await temporary()
   await initVault(root, 'Test', 'Test')
   const legacy = approve(await loadSnapshot(root), setup)
-  legacy.handoffs[0]!.productRevision = 52
-  delete legacy.handoffs[0]!.frozenDefinition
+  legacy.handoffs[0]!.productRevision = 0
   await saveSnapshot(legacy, root)
   const beforeHistory = await readFile(join(root, 'suo-history/0000000001.json'), 'utf8')
-  const correction: ProductOperation = { type: 'correct_handoff_product_revision', handoffId: 'handoff:a:1', expectedFrom: 52, to: 1, reason: 'Verified original batch commit', evidenceRefs: ['https://example.test/commit/fixed-evidence'] }
+  const correction: ProductOperation = { type: 'correct_handoff_product_revision', handoffId: 'handoff:a:1', expectedFrom: 0, to: 1, reason: 'Verified original batch commit', evidenceRefs: ['https://example.test/commit/fixed-evidence'] }
   const next = approve(await loadSnapshot(root), [correction])
-  expect(next.handoffs[0]).toEqual({ ...legacy.handoffs[0], productRevision: 1, productRevisionCorrections: [{ from: 52, to: 1, reason: correction.reason, evidenceRefs: correction.evidenceRefs, proposalId: 'p:1', revision: 2, correctedAt: next.product.updatedAt }] })
+  expect(next.handoffs[0]).toEqual({ ...legacy.handoffs[0], productRevision: 1, productRevisionCorrections: [{ from: 0, to: 1, reason: correction.reason, evidenceRefs: correction.evidenceRefs, proposalId: 'p:1', revision: 2, correctedAt: next.product.updatedAt }] })
   expect(next.handoffs[1]).toEqual(legacy.handoffs[1])
   await saveSnapshot(next, root)
   expect(await readFile(join(root, 'suo-history/0000000001.json'), 'utf8')).toBe(beforeHistory)
@@ -109,8 +105,7 @@ it('records explicit corrections without changing frozen semantics or prior Vaul
   await saveAuthority(await loadAuthority(join(root, '.suo/compiled')), repo)
   const loaded = await loadSnapshot(repo)
   expect(loaded.handoffs).toEqual(next.handoffs)
-  expect(renderHandoff(loaded, loaded.handoffs[0]!, legacy)).toContain('Legacy history:')
-  expect(renderHandoff(loaded, loaded.handoffs[0]!, legacy)).toContain('52 → 1')
+  expect(renderHandoff(loaded, loaded.handoffs[0]!, legacy)).toContain('0 → 1')
   expect(validateSnapshot(loaded)).toEqual([])
   const tampered = structuredClone(loaded)
   tampered.handoffs[0]!.productRevisionCorrections![0]!.to = 0

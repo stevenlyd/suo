@@ -5,21 +5,44 @@
   "agent": "external-agent",
   "submission": {
     "implementationRefs": [
-      { "kind": "commit", "uri": "https://example.test/repository/commit/abc123", "revision": "abc123" }
+      {
+        "kind": "commit",
+        "uri": "https://example.test/repository/commit/abc123",
+        "revision": "abc123"
+      }
     ],
     "deliveredBehavior": [
       "The exact idea is stored in the imported Suo authority.",
       "The CLI returns one structured NextProductAction."
     ],
     "acceptanceEvidence": [
-      { "acceptanceId": "intake-stored", "evidence": ["test:intake-stored"], "result": "pass" },
-      { "acceptanceId": "one-action", "evidence": ["test:one-action"], "result": "pass" }
+      {
+        "acceptanceId": "intake-stored",
+        "evidence": [
+          "test:intake-stored"
+        ],
+        "result": "pass"
+      },
+      {
+        "acceptanceId": "one-action",
+        "evidence": [
+          "test:one-action"
+        ],
+        "result": "pass"
+      }
     ],
     "checks": [
-      { "command": "pnpm check", "result": "pass", "evidenceRef": "run:ci-1" }
+      {
+        "command": "pnpm check",
+        "result": "pass",
+        "evidenceRef": "run:ci-1",
+        "id": "project-check",
+        "revision": "abc123"
+      }
     ],
     "deviations": [],
     "residualRisks": [],
-    "newProductQuestions": []
+    "newProductQuestions": [],
+    "handoffRevision": 1
   }
 }

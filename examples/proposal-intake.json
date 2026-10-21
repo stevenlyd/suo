@@ -11,13 +11,35 @@
         "phase": "mvp",
         "contract": {
           "objective": "Preserve the user's exact idea and expose one bounded next Product action.",
-          "frozenBehavior": ["The idea is stored verbatim.", "The default view contains exactly one NextProductAction."],
-          "scope": ["Single owner", "Single Product workspace"],
-          "nonGoals": ["Software implementation planning", "Automatic development-agent dispatch"],
+          "frozenBehavior": [
+            "The idea is stored verbatim.",
+            "The default view contains exactly one NextProductAction."
+          ],
+          "scope": [
+            "Single owner",
+            "Single Product workspace"
+          ],
+          "nonGoals": [
+            "Software implementation planning",
+            "Automatic development-agent dispatch"
+          ],
           "acceptance": [
-            { "id": "intake-stored", "text": "The exact idea is represented in the imported Suo authority." },
-            { "id": "one-action", "text": "suo next --json returns exactly one action." }
-          ]
+            {
+              "id": "intake-stored",
+              "text": "The exact idea is represented in the imported Suo authority."
+            },
+            {
+              "id": "one-action",
+              "text": "suo next --json returns exactly one action."
+            }
+          ],
+          "requiredChecks": [
+            {
+              "id": "project-check",
+              "description": "Run pnpm check against the implementation revision"
+            }
+          ],
+          "checkRationale": "The project check covers intake and next-action regressions."
         }
       }
     },
@@ -28,8 +50,14 @@
         "moduleId": "module:intake",
         "question": "What is the default unit of interaction after idea intake?",
         "alternatives": [
-          { "id": "one", "label": "Exactly one bounded Product action" },
-          { "id": "backlog", "label": "A full backlog" }
+          {
+            "id": "one",
+            "label": "Exactly one bounded Product action"
+          },
+          {
+            "id": "backlog",
+            "label": "A full backlog"
+          }
         ],
         "recommendation": "Exactly one bounded Product action",
         "choice": "Exactly one bounded Product action",
@@ -38,5 +66,6 @@
         "evidenceRefs": []
       }
     }
-  ]
+  ],
+  "expectedRevision": 0
 }

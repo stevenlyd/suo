@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { assertSubmission } from './protocol.js'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { adoptVaultNote, approveVaultDraft, compileVault, initVault, readVaultDraft, recoverVault } from './vault.js'
@@ -41,6 +42,13 @@ try {
     case 'reject': await rejectCommand(); break
     case 'inspect': await inspectCommand(); break
     case 'check': await checkCommand(); break
+    case 'diagnose': {
+      const raw: unknown = JSON.parse(await readFile(resolve(requiredArg('snapshot JSON path')), 'utf8'))
+      const issues = validateSnapshot(raw)
+      print({ status: issues.length ? 'needs-completion' : 'valid', issues, verification: 'Structural validation only; supplied evidence and declared identity are not independently authenticated.' })
+      if (issues.length) process.exitCode = 1
+      break
+    }
     case 'help':
     case '--help':
     case '-h':
@@ -228,9 +236,9 @@ function requiredFlag(name: string): string { const value = flag(name); if (!val
 function requiredArg(label: string): string { const value = argv.shift(); if (!value || value.startsWith('--')) throw new Error(`missing ${label}`); return value }
 async function readSubmission(path: string): Promise<SubmissionEnvelope> {
   const text = path === '-' ? await readStdin() : await readFile(path, 'utf8')
-  const value = JSON.parse(text) as Partial<SubmissionEnvelope>
-  if (value.kind !== 'proposal' && value.kind !== 'closure') throw new Error('submission kind must be proposal or closure')
-  return value as SubmissionEnvelope
+  const value: unknown = JSON.parse(text)
+  assertSubmission(value)
+  return value
 }
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = []
@@ -262,6 +270,7 @@ Usage:
   suo reject <closure-id> --reason <reason> --verifier <identity>
   suo inspect [record-id] [--json]
   suo check
+  suo diagnose <raw-snapshot.json>
   suo vault init [directory] --idea <idea> [--title <title>]
   suo vault adopt <note.md> --kind module|decision [--module "[[Module note]]"]
   suo vault check

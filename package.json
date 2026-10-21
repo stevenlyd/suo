@@ -1,6 +1,6 @@
 {
   "name": "@stevenlyd/suo",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A shuttle for thought: one decision at a time, into form.",
   "type": "module",
   "private": true,
@@ -27,7 +27,8 @@
     "gemini-extension.json",
     "distribution-lock.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/validation-upgrade.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

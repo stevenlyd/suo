@@ -92,11 +92,12 @@ export async function readVaultDraft(root: string): Promise<VaultDraft> {
   const timestamp = approved.product.updatedAt
   for (const note of notes.filter(n => n.kind === 'module')) {
     const old = snapshot.modules.find(m => m.id === note.id)
+    if (!note.document.has('suo_required_checks') || !note.document.has('suo_check_rationale')) throw new Error(`${note.path}: required checks need explicit completion`)
     const module: ProductModule = {
       id: note.id, title: stringField(note, 'suo_title'), phase: stringField(note, 'suo_phase', snapshot.product.activeSlice),
       definitionStatus: old?.definitionStatus ?? 'candidate',
       dependencies: arrayField<unknown>(note, 'suo_dependencies').map(link => resolveLink(notes, note, link, 'module')).sort(),
-      contract: { objective: noteContent(note), frozenBehavior: arrayField(note, 'suo_frozen_behavior'), scope: arrayField(note, 'suo_scope'), nonGoals: arrayField(note, 'suo_non_goals'), acceptance: arrayField(note, 'suo_acceptance') },
+      contract: { objective: noteContent(note), frozenBehavior: arrayField(note, 'suo_frozen_behavior'), scope: arrayField(note, 'suo_scope'), nonGoals: arrayField(note, 'suo_non_goals'), acceptance: arrayField(note, 'suo_acceptance'), requiredChecks: arrayField(note, 'suo_required_checks'), checkRationale: note.document.get('suo_check_rationale') as string },
       createdAt: old?.createdAt ?? timestamp, updatedAt: old?.updatedAt ?? timestamp,
     }
     if (!old) snapshot.modules.push(module)

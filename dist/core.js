@@ -1,12 +1,15 @@
+import { assertSubmission, assertClosureSubmission, assertOperation, assertDecisionProposal } from './protocol.js';
+import { assertValidSnapshot } from './validation.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { DirectedGraph } from 'graphology';
 import { hasCycle, topologicalSort, willCreateCycle } from 'graphology-dag';
 const now = (value) => value ?? new Date().toISOString();
 const id = (prefix, value) => value ?? `${prefix}:${randomUUID()}`;
-const copy = (snapshot) => structuredClone(snapshot);
+const copy = (snapshot) => { assertValidSnapshot(snapshot); return structuredClone(snapshot); };
 const commit = (snapshot, timestamp) => {
     snapshot.revision += 1;
     snapshot.product.updatedAt = timestamp;
+    assertValidSnapshot(snapshot);
     return snapshot;
 };
 export function createProduct(input, options = {}) {
@@ -28,8 +31,9 @@ export function createProduct(input, options = {}) {
         modules: [], decisions: [], proposals: [], handoffs: [], realizations: [], closures: [],
     };
 }
-const emptyContract = () => ({ objective: '', frozenBehavior: [], scope: [], nonGoals: [], acceptance: [] });
+const emptyContract = () => ({ objective: '', frozenBehavior: [], scope: [], nonGoals: [], acceptance: [], requiredChecks: [], checkRationale: '' });
 export function createModule(snapshot, input, options = {}) {
+    assertOperation({ type: 'create_module', module: input });
     if (snapshot.modules.some(value => value.id === input.id))
         throw new Error(`module already exists: ${input.id}`);
     const timestamp = now(options.now);
@@ -47,6 +51,7 @@ export function createModule(snapshot, input, options = {}) {
     return commit(next, timestamp);
 }
 export function updateModule(snapshot, moduleId, patch, options = {}) {
+    assertOperation({ type: 'update_module', moduleId, patch });
     const next = copy(snapshot);
     const module = requireModule(next, moduleId);
     if (['superseded', 'retired'].includes(module.definitionStatus))
@@ -116,6 +121,7 @@ export function disconnectModules(snapshot, moduleId, dependencyId, options = {}
     return commit(next, module.updatedAt);
 }
 export function proposeDecision(snapshot, input, options = {}) {
+    assertDecisionProposal(input);
     requireModule(snapshot, input.moduleId);
     if (snapshot.decisions.some(value => value.id === input.id))
         throw new Error(`decision already exists: ${input.id}`);
@@ -130,6 +136,7 @@ export function proposeDecision(snapshot, input, options = {}) {
     return commit(next, timestamp);
 }
 export function updateDecisionProposal(snapshot, decisionId, patch, options = {}) {
+    assertOperation({ type: 'update_decision', decisionId, patch });
     const next = copy(snapshot);
     const decision = requireDecision(next, decisionId);
     if (!['open', 'proposed'].includes(decision.status))
@@ -164,6 +171,7 @@ export function deleteDraftDecision(snapshot, decisionId, options = {}) {
     return commit(next, now(options.now));
 }
 export function approveDecision(snapshot, decisionId, input, options = {}) {
+    assertOperation({ type: 'approve_decision', decisionId, ...input });
     const next = copy(snapshot);
     const decision = requireDecision(next, decisionId);
     if (!['open', 'proposed'].includes(decision.status))
@@ -184,6 +192,7 @@ export function approveDecision(snapshot, decisionId, input, options = {}) {
     return commit(next, timestamp);
 }
 export function deferDecision(snapshot, decisionId, rationale, options = {}) {
+    assertOperation({ type: 'defer_decision', decisionId, rationale });
     const next = copy(snapshot);
     const decision = requireDecision(next, decisionId);
     if (!['open', 'proposed'].includes(decision.status))
@@ -268,6 +277,7 @@ export function startRealization(snapshot, handoffId, input, options = {}) {
     return commit(next, timestamp);
 }
 export function submitClosure(snapshot, realizationId, submission, options = {}) {
+    assertClosureSubmission(submission);
     const next = copy(snapshot);
     const realization = requireRealization(next, realizationId);
     if (!['in_progress', 'reopened'].includes(realization.status))
@@ -275,6 +285,11 @@ export function submitClosure(snapshot, realizationId, submission, options = {})
     const handoff = requireHandoff(next, realization.handoffId);
     if (!['in_delivery', 'current'].includes(handoff.status) || handoff.revision !== realization.handoffRevision)
         throw new Error('realization targets a stale handoff');
+    if (submission.handoffRevision !== handoff.revision)
+        throw new Error('closure baseline conflict: observed handoff revision differs');
+    const issues = closureCoverage(submission, handoff);
+    if (issues.length)
+        throw new Error(issues.join('; '));
     if (!submission.implementationRefs.length)
         throw new Error('closure requires at least one implementation reference');
     const timestamp = now(options.now);
@@ -301,17 +316,11 @@ export function acceptClosure(snapshot, closureId, verifier, options = {}) {
     if (realization.agent === verifierIdentity)
         throw new Error('an implementation agent cannot accept its own closure');
     const handoff = requireHandoff(next, closure.handoffId);
-    const module = requireModule(next, realization.moduleId);
-    if (handoff.revision !== closure.handoffRevision || handoff.status === 'stale')
+    if (handoff.revision !== closure.handoffRevision || handoff.status !== 'in_delivery')
         throw new Error('closure targets a stale handoff');
-    const expected = new Set(module.contract.acceptance.map(value => value.id));
-    const results = new Map(closure.acceptanceEvidence.map(value => [value.acceptanceId, value]));
-    const missing = [...expected].filter(value => !results.has(value));
-    const failed = [...expected].filter(value => results.get(value)?.result !== 'pass');
-    if (missing.length || failed.length)
-        throw new Error(`acceptance evidence is incomplete: ${[...missing, ...failed].join(', ')}`);
-    if (closure.checks.some(value => value.result !== 'pass'))
-        throw new Error('closure contains checks that did not pass');
+    const issues = closureCoverage(closure, handoff, true);
+    if (issues.length)
+        throw new Error(issues.join('; '));
     if (closure.deviations.some(value => value.requiresProductDecision) || closure.newProductQuestions.length)
         throw new Error('closure requires Product reconciliation');
     const timestamp = now(options.now);
@@ -365,7 +374,8 @@ export function reopenClosure(snapshot, realizationId, reason, options = {}) {
     return commit(next, timestamp);
 }
 export function stageProposal(snapshot, input, options = {}) {
-    if (input.expectedRevision !== undefined && (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision !== snapshot.revision))
+    assertSubmission(input);
+    if (input.expectedRevision !== snapshot.revision)
         throw new Error(`proposal baseline conflict: expected ${input.expectedRevision}, current ${snapshot.revision}; inspect current authority before resubmitting`);
     if (!input.summary.trim())
         throw new Error('proposal summary is required');
@@ -391,6 +401,7 @@ export function stageProposal(snapshot, input, options = {}) {
     return next;
 }
 export function approveProposal(snapshot, proposalId, options = {}) {
+    assertValidSnapshot(snapshot);
     const proposal = requireProposal(snapshot, proposalId);
     if (proposal.status !== 'pending')
         throw new Error(`proposal is ${proposal.status}`);
@@ -402,7 +413,11 @@ export function approveProposal(snapshot, proposalId, options = {}) {
     let next = copy(snapshot);
     const existingHandoffs = new Set(snapshot.handoffs.map(value => value.id));
     const approval = { proposalId, revision: snapshot.revision + 1 };
+    const pending = requireProposal(next, proposalId);
+    pending.status = 'approved';
+    pending.decidedAt = timestamp;
     for (const operation of proposal.operations) {
+        assertOperation(operation);
         if (operation.type === 'correct_handoff_product_revision' && !existingHandoffs.has(operation.handoffId))
             throw new Error('revision corrections require a previously committed handoff');
         next = applyProductOperation(next, operation, timestamp, approval);
@@ -418,6 +433,7 @@ export function approveProposal(snapshot, proposalId, options = {}) {
     approved.decidedAt = timestamp;
     next.revision = snapshot.revision + 1;
     next.product.updatedAt = timestamp;
+    assertValidSnapshot(next);
     return next;
 }
 export function rejectProposal(snapshot, proposalId, reason, options = {}) {
@@ -432,6 +448,7 @@ export function rejectProposal(snapshot, proposalId, reason, options = {}) {
     return commit(next, timestamp);
 }
 export function submitClosureEnvelope(snapshot, envelope, options = {}) {
+    assertSubmission(envelope);
     const timestamp = now(options.now);
     let next = copy(snapshot);
     let realizationId = envelope.realizationId;
@@ -449,15 +466,19 @@ export function submitClosureEnvelope(snapshot, envelope, options = {}) {
             next = startRealization(next, envelope.handoffId, { id: realizationId, agent: envelope.agent }, { now: timestamp });
         }
     }
+    if (requireRealization(next, realizationId).agent !== envelope.agent.trim())
+        throw new Error('declared agent does not match realization agent');
     next = submitClosure(next, realizationId, envelope.submission, {
         ...(envelope.id ? { id: envelope.id } : {}),
         now: timestamp,
     });
     next.revision = snapshot.revision + 1;
     next.product.updatedAt = timestamp;
+    assertValidSnapshot(next);
     return next;
 }
 export function nextAction(snapshot) {
+    assertValidSnapshot(snapshot);
     const pendingProposal = snapshot.proposals.find(value => value.status === 'pending');
     if (pendingProposal)
         return {
@@ -510,6 +531,8 @@ export function validateInvariants(snapshot) {
         for (const value of values)
             seen.has(value.id) ? issues.push(`duplicate ${label} id: ${value.id}`) : seen.add(value.id);
     }
+    if (issues.length)
+        return issues; // Duplicate graph nodes must not throw during diagnostics.
     for (const handoff of snapshot.handoffs) {
         const corrections = handoff.productRevisionCorrections ?? [];
         if (corrections.some((value, index) => value.from === value.to || value.to >= value.revision ||
@@ -521,8 +544,10 @@ export function validateInvariants(snapshot) {
             issues.push(`invalid Product revision correction chain: ${handoff.id}`);
         }
         const frozen = handoff.frozenDefinition;
-        if (!frozen)
-            continue; // Legacy records remain readable without inventing history.
+        if (!frozen) {
+            issues.push(`missing frozen definition: ${handoff.id}; needs explicit completion`);
+            continue;
+        }
         if (frozen.module.id !== handoff.moduleId ||
             JSON.stringify(frozen.decisions.map(value => value.id).sort()) !== JSON.stringify([...handoff.decisionIds].sort()) ||
             frozen.decisions.some(value => value.moduleId !== handoff.moduleId || !['approved', 'deferred'].includes(value.status)) ||
@@ -534,11 +559,84 @@ export function validateInvariants(snapshot) {
             issues.push(`frozen Markdown digest mismatch: ${handoff.id}`);
         }
     }
+    const unique = (ids, label) => { if (new Set(ids).size !== ids.length)
+        issues.push(`duplicate ${label}`); };
+    for (const module of snapshot.modules) {
+        unique(module.contract.acceptance.map(value => value.id), `acceptance id: ${module.id}`);
+        unique(module.contract.requiredChecks.map(value => value.id), `required check id: ${module.id}`);
+        unique(module.dependencies, `dependency: ${module.id}`);
+        if (module.definitionStatus === 'frozen' && contractGaps(module.contract).length)
+            issues.push(`incomplete frozen contract: ${module.id}`);
+    }
+    unique(snapshot.handoffs.map(value => `${value.moduleId}/${value.revision}`), 'handoff revision');
+    for (const handoff of snapshot.handoffs) {
+        if (!snapshot.modules.some(value => value.id === handoff.moduleId))
+            issues.push(`unknown handoff module: ${handoff.id}`);
+        if (handoff.productRevision > snapshot.revision)
+            issues.push(`future handoff Product revision: ${handoff.id}`);
+        unique(handoff.decisionIds, `handoff decision: ${handoff.id}`);
+        for (const decisionId of handoff.decisionIds)
+            if (!snapshot.decisions.some(value => value.id === decisionId && value.moduleId === handoff.moduleId))
+                issues.push(`handoff decision belongs to another module or is unknown: ${handoff.id}/${decisionId}`);
+        const frozen = handoff.frozenDefinition;
+        if (frozen) {
+            unique(frozen.module.contract.acceptance.map(value => value.id), `frozen acceptance: ${handoff.id}`);
+            unique(frozen.module.contract.requiredChecks.map(value => value.id), `frozen required check: ${handoff.id}`);
+            if (frozen.module.definitionStatus !== 'frozen' || contractGaps(frozen.module.contract).length)
+                issues.push(`incomplete frozen definition: ${handoff.id}`);
+        }
+    }
+    for (const realization of snapshot.realizations) {
+        if (realization.agent !== realization.agent.trim())
+            issues.push(`noncanonical realization agent: ${realization.id}`);
+        const handoff = snapshot.handoffs.find(value => value.id === realization.handoffId);
+        if (!handoff || realization.moduleId !== handoff.moduleId || realization.handoffRevision !== handoff.revision)
+            issues.push(`realization does not match handoff: ${realization.id}`);
+        const closure = snapshot.closures.find(value => value.id === realization.closureId);
+        if (realization.closureId && (!closure || closure.realizationId !== realization.id))
+            issues.push(`realization closure mismatch: ${realization.id}`);
+        if (realization.status === 'closed' && closure?.status !== 'accepted')
+            issues.push(`closed realization lacks accepted closure: ${realization.id}`);
+        if (realization.status === 'closure_submitted' && closure?.status !== 'submitted')
+            issues.push(`realization lacks submitted closure: ${realization.id}`);
+    }
+    for (const closure of snapshot.closures) {
+        if (closure.verifier !== undefined && closure.verifier !== closure.verifier.trim())
+            issues.push(`noncanonical closure verifier: ${closure.id}`);
+        const realization = snapshot.realizations.find(value => value.id === closure.realizationId);
+        const handoff = snapshot.handoffs.find(value => value.id === closure.handoffId);
+        if (!realization || !handoff || realization.handoffId !== closure.handoffId || closure.handoffRevision !== handoff.revision)
+            issues.push(`closure does not match realization handoff: ${closure.id}`);
+        if (handoff)
+            issues.push(...closureCoverage(closure, handoff, closure.status === 'accepted'));
+        if (closure.status === 'accepted' && (closure.deviations.some(value => value.requiresProductDecision) || closure.newProductQuestions.length))
+            issues.push(`accepted closure needs Product reconciliation: ${closure.id}`);
+        if (closure.status === 'submitted' && (realization?.closureId !== closure.id || realization.status !== 'closure_submitted'))
+            issues.push(`submitted closure is not active: ${closure.id}`);
+        if (closure.status !== 'submitted' && (!closure.verifier?.trim() || !closure.decidedAt || closure.verifier === realization?.agent))
+            issues.push(`invalid closure verification identity/state: ${closure.id}`);
+    }
+    for (const handoff of snapshot.handoffs)
+        if (handoff.status === 'closed' && !snapshot.realizations.some(value => value.handoffId === handoff.id && value.status === 'closed' && snapshot.closures.some(closure => closure.id === value.closureId && closure.status === 'accepted')))
+            issues.push(`closed handoff lacks accepted realization: ${handoff.id}`);
+    for (const proposal of snapshot.proposals) {
+        if (proposal.baseRevision > snapshot.revision)
+            issues.push(`future proposal baseline: ${proposal.id}`);
+        if (proposal.status !== 'pending' && !proposal.decidedAt)
+            issues.push(`decided proposal lacks decision timestamp: ${proposal.id}`);
+    }
     const moduleIds = new Set(snapshot.modules.map(value => value.id));
     for (const module of snapshot.modules)
         for (const dependency of module.dependencies)
             if (!moduleIds.has(dependency))
                 issues.push(`unknown module dependency: ${module.id} -> ${dependency}`);
+    for (const decision of snapshot.decisions) {
+        unique(decision.prerequisites, `decision prerequisite: ${decision.id}`);
+        if (decision.supersedes && !snapshot.decisions.some(value => value.id === decision.supersedes && value.moduleId === decision.moduleId && value.status === 'superseded'))
+            issues.push(`invalid superseded decision link: ${decision.id}`);
+    }
+    if (issues.length)
+        return issues;
     const graph = moduleGraph(snapshot, false);
     if (hasCycle(graph))
         issues.push('module dependency graph contains a cycle');
@@ -617,6 +715,8 @@ function contractGaps(contract) {
         gaps.push('nonGoals');
     if (!contract.acceptance.length)
         gaps.push('acceptance');
+    if (!contract.checkRationale.trim())
+        gaps.push('checkRationale');
     return gaps;
 }
 function createCurrentHandoff(snapshot, module, timestamp) {
@@ -802,4 +902,26 @@ function requireRealization(snapshot, realizationId) { const value = snapshot.re
     throw new Error(`unknown realization: ${realizationId}`); return value; }
 function requireClosure(snapshot, closureId) { const value = snapshot.closures.find(item => item.id === closureId); if (!value)
     throw new Error(`unknown closure: ${closureId}`); return value; }
+function closureCoverage(closure, handoff, requirePass = false) {
+    const issues = [];
+    const contract = handoff.frozenDefinition.module.contract;
+    const exact = (actual, expected, label) => {
+        if (new Set(actual).size !== actual.length || actual.length !== expected.length || actual.some(id => !expected.includes(id)))
+            issues.push(`${label} must exactly cover frozen contract without duplicate or unknown IDs`);
+    };
+    exact(closure.acceptanceEvidence.map(value => value.acceptanceId), contract.acceptance.map(value => value.id), 'acceptance evidence');
+    exact(closure.checks.map(value => value.id), contract.requiredChecks.map(value => value.id), 'required checks');
+    for (const item of closure.acceptanceEvidence)
+        if (item.result === 'pass' && (!item.evidence.length || item.evidence.some(value => !value.trim())))
+            issues.push(`empty acceptance evidence: ${item.acceptanceId}`);
+    for (const check of closure.checks) {
+        if (!closure.implementationRefs.some(value => value.revision === check.revision))
+            issues.push(`check revision is not an implementation revision: ${check.id}`);
+        if (check.result === 'pass' && !check.evidenceRef?.trim())
+            issues.push(`empty check evidence: ${check.id}`);
+    }
+    if (requirePass && (closure.acceptanceEvidence.some(value => value.result !== 'pass') || closure.checks.some(value => value.result !== 'pass')))
+        issues.push('acceptance evidence or required checks did not pass');
+    return issues;
+}
 //# sourceMappingURL=core.js.map

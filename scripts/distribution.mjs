@@ -8,7 +8,7 @@ export const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const json = value => `${JSON.stringify(value, null, 2)}\n`
 const hash = value => createHash('sha256').update(value).digest('hex')
 const skillPath = 'skills/suo/SKILL.md'
-export const packageFiles = ['dist', 'schemas', 'skills', 'scripts/distribution.mjs', 'docs/distribution.md', 'docs/testing/distribution.md', 'plugin.json', '.claude-plugin', '.agents/plugins', 'gemini-extension.json', 'distribution-lock.json', 'README.md', 'LICENSE']
+export const packageFiles = ['dist', 'schemas', 'skills', 'scripts/distribution.mjs', 'docs/distribution.md', 'docs/testing/distribution.md', 'plugin.json', '.claude-plugin', '.agents/plugins', 'gemini-extension.json', 'distribution-lock.json', 'README.md', 'LICENSE', 'docs/validation-upgrade.md']
 const manifestPaths = ['plugin.json', '.claude-plugin/plugin.json', '.claude-plugin/marketplace.json', '.agents/plugins/marketplace.json', 'gemini-extension.json']
 export const validVersion = value => /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value)
 export function newerVersion(next, previous) {

@@ -23,14 +23,14 @@ async function approveNotes(root: string): Promise<SuoSnapshot> { return approve
 async function operations(root: string, ops: ProductOperation[], legacy = false): Promise<SuoSnapshot> {
   let snapshot = await loadSnapshot(root)
   const id = `proposal:test-${snapshot.revision}`
-  snapshot = stageProposal(snapshot, { kind: 'proposal', id, summary: 'Reviewed test proposal', operations: ops })
+  snapshot = stageProposal(snapshot, { expectedRevision: snapshot.revision, kind: 'proposal', id, summary: 'Reviewed test proposal', operations: ops })
   await saveSnapshot(snapshot, root)
   snapshot = approveProposal(await loadSnapshot(root), id)
-  if (legacy) for (const handoff of snapshot.handoffs) delete handoff.frozenDefinition
+  if (legacy) for (const handoff of snapshot.handoffs) Reflect.deleteProperty(handoff, 'frozenDefinition')
   await saveSnapshot(snapshot, root)
   return loadSnapshot(root)
 }
-const contract = { objective: 'Original objective', frozenBehavior: ['Original behavior'], scope: ['Feature'], nonGoals: ['Other features'], acceptance: [{ id: 'observed', text: 'Observable result' }] }
+const contract = { objective: 'Original objective', frozenBehavior: ['Original behavior'], scope: ['Feature'], nonGoals: ['Other features'], requiredChecks: [], checkRationale: 'Manual observation suffices for this fixture.', acceptance: [{ id: 'observed', text: 'Observable result' }] }
 
 describe('stateless knowledge-store adapters', () => {
   it('switches between projects and adapters without global state', async () => {
@@ -87,7 +87,7 @@ describe('stateless knowledge-store adapters', () => {
     const root = await vault(); await note(root); await approveNotes(root)
     const path = join(root, 'Feature.md')
     await writeFile(path, (await readFile(path, 'utf8')).replace('suo_kind: module', 'suo_kind: decision'))
-    await expect(readVaultDraft(root)).rejects.toThrow(/identity prefix|kind cannot change/)
+    await expect(readVaultDraft(root)).rejects.toThrow(/identity prefix|kind cannot change|unsupported or lifecycle-controlled/)
   })
 
   it('resolves only explicit typed wikilinks and rejects ambiguous links and cycles', async () => {
@@ -121,10 +121,10 @@ describe('stateless knowledge-store adapters', () => {
     }
   })
 
-  it.each([false, true])('preserves frozen handoff content after a new approved definition (legacy=%s)', async (legacy) => {
+  it('preserves frozen handoff content after a new approved definition', async () => {
     const root = await vault(), id = await note(root)
     await approveNotes(root)
-    let frozen = await operations(root, [{ type: 'update_module', moduleId: id, patch: { contract } }, { type: 'freeze_module', moduleId: id }], legacy)
+    let frozen = await operations(root, [{ type: 'update_module', moduleId: id, patch: { contract } }, { type: 'freeze_module', moduleId: id }])
     const originalRevision = frozen.revision, handoff = frozen.handoffs[0]!
     const path = join(root, 'Feature.md')
     await writeFile(path, (await readFile(path, 'utf8')).replace('Original objective', 'New objective'))
@@ -140,20 +140,15 @@ describe('stateless knowledge-store adapters', () => {
     expect(output).toContain('Status: stale')
   })
 
-  it('does not recover legacy content from later coincidentally matching definitions', async () => {
+  it('rejects incomplete historical authority without modifying Vault history', async () => {
     const root = await vault(), id = await note(root)
     await approveNotes(root)
-    const frozen = await operations(root, [
+    const before = await readVaultHistory(root)
+    await expect(operations(root, [
       { type: 'update_module', moduleId: id, patch: { contract } },
       { type: 'freeze_module', moduleId: id },
-      { type: 'update_module', moduleId: id, patch: { contract: { ...contract, objective: 'Later objective' } } },
-    ], true)
-    await operations(root, [{ type: 'update_module', moduleId: id, patch: { title: 'Later title', contract } }])
-    await generateArtifacts(await loadSnapshot(root), root)
-    const output = await readFile(join(root, 'docs/suo/HANDOFFS', `${frozen.handoffs[0]!.id.replaceAll(':', '_')}.md`), 'utf8')
-    expect(output).toContain('Historical content unavailable')
-    expect(output).not.toContain('Original objective')
-    expect(output).not.toContain('Later title')
+    ], true)).rejects.toThrow('frozenDefinition')
+    expect(await readVaultHistory(root)).toEqual(before)
   })
 
   it('supports decision notes but requires reopening approved decisions before editing', async () => {

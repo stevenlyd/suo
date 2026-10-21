@@ -3,6 +3,10 @@
   "id": "proposal:freeze-intake",
   "summary": "Freeze the complete idea-intake contract",
   "operations": [
-    { "type": "freeze_module", "moduleId": "module:intake" }
-  ]
+    {
+      "type": "freeze_module",
+      "moduleId": "module:intake"
+    }
+  ],
+  "expectedRevision": 1
 }
