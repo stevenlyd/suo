@@ -8,6 +8,20 @@ See [release process](https://github.com/stevenlyd/suo/blob/main/docs/releases.m
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-21
+
+### Changed
+
+- Restore the README's approachable Suo 梭 introduction, standalone Unit-model explanation, runnable onboarding, repository layout and development guidance. Documentation-only update; runtime behavior is unchanged.
+
+### Breaking changes
+
+- None.
+
+### Migration
+
+- No project migration. The patch version keeps the shipped README and native distribution identity consistent; existing schema-5 projects remain compatible.
+
 ## [0.8.2] - 2026-10-21
 
 ### Added
