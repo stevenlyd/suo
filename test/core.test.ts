@@ -27,7 +27,7 @@ const contract = (prefix: string): ModuleContract => ({
   frozenBehavior: [`${prefix} behavior`],
   scope: [`${prefix} scope`],
   nonGoals: [`${prefix} non-goal`],
-  acceptance: [{ id: `${prefix}-acceptance`, text: `${prefix} works` }],
+  requiredChecks: [{ id: 'tests', description: 'Fixture tests' }], checkRationale: 'Manual observation suffices for this fixture.', acceptance: [{ id: `${prefix}-acceptance`, text: `${prefix} works` }],
 })
 
 function product(): SuoSnapshot {
@@ -46,10 +46,11 @@ function frozenModule(): SuoSnapshot {
 }
 
 const closure = (): ClosureSubmission => ({
+  handoffRevision: 1,
   implementationRefs: [{ kind: 'commit', uri: 'https://example.test/commit/abc', revision: 'abc' }],
   deliveredBehavior: ['a behavior'],
   acceptanceEvidence: [{ acceptanceId: 'a-acceptance', evidence: ['pnpm test: pass'], result: 'pass' }],
-  checks: [{ command: 'pnpm test', result: 'pass', evidenceRef: 'run:1' }],
+  checks: [{ id: 'tests', revision: 'abc', command: 'pnpm test', result: 'pass', evidenceRef: 'run:1' }],
   deviations: [], residualRisks: [], newProductQuestions: [],
 })
 
@@ -107,7 +108,7 @@ describe('Suo', () => {
     bad.acceptanceEvidence[0]!.result = 'partial'
     bad.newProductQuestions.push('Should the behavior change?')
     snapshot = submitClosure(snapshot, 'realization:a', bad, { id: 'closure:a', now: time })
-    expect(() => acceptClosure(snapshot, 'closure:a', 'owner', { now: time })).toThrow('acceptance evidence is incomplete')
+    expect(() => acceptClosure(snapshot, 'closure:a', 'owner', { now: time })).toThrow('did not pass')
   })
 
   it('reopening an upstream decision stales handoffs and downstream definitions', () => {
@@ -141,7 +142,7 @@ describe('Suo', () => {
 
   it('stages an agent proposal before owner authority and applies it atomically', () => {
     let snapshot = product()
-    snapshot = stageProposal(snapshot, {
+    snapshot = stageProposal(snapshot, { expectedRevision: snapshot.revision,
       kind: 'proposal',
       id: 'proposal:create-intake',
       summary: 'Create the bounded idea-intake module',
@@ -158,7 +159,7 @@ describe('Suo', () => {
 
   it('rejects a proposal when Product authority changed after submission', () => {
     let snapshot = product()
-    snapshot = stageProposal(snapshot, {
+    snapshot = stageProposal(snapshot, { expectedRevision: snapshot.revision,
       kind: 'proposal', id: 'proposal:stale', summary: 'Create A',
       operations: [{ type: 'create_module', module: { id: 'module:a', title: 'A' } }],
     }, { now: time })

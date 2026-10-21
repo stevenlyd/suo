@@ -1,3 +1,4 @@
+import { assertValidSnapshot } from './validation.js'
 import { createHash } from 'node:crypto'
 import { access, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve, sep } from 'node:path'
@@ -20,7 +21,8 @@ import { reconcileImportedAuthority } from './core.js'
 export const sourceDirectoryName = 'suo'
 export const sourceRootFileName = 'product.suo.ts'
 
-interface ResourceNode extends Omit<ImplementationRef, 'kind'> {
+interface ResourceNode extends Omit<ImplementationRef, 'kind' | 'revision'> {
+  readonly revision?: string
   readonly kind: ImplementationRef['kind'] | 'evidence'
   readonly id: string
 }
@@ -49,7 +51,7 @@ interface SourceClosure extends Omit<Closure, 'realizationId' | 'handoffId' | 'i
   readonly handoff: SourceHandoff
   readonly implementation: ResourceNode[]
   readonly acceptanceEvidence: Array<{ acceptanceId: string; evidence: ResourceNode[]; result: 'pass' | 'partial' | 'not_met' }>
-  readonly checks: Array<{ command?: string; system?: string; result: 'pass' | 'fail' | 'not_run'; evidence?: ResourceNode }>
+  readonly checks: Array<{ id: string; revision: string; command?: string; system?: string; result: 'pass' | 'fail' | 'not_run'; evidence?: ResourceNode }>
   readonly deployment?: { environment: string; revision: string; evidence: ResourceNode }
 }
 interface SourceProposal extends Omit<Proposal, 'operations'> { readonly kind: 'proposal-audit' }
@@ -82,7 +84,7 @@ export type HandoffStatus = 'current' | 'in_delivery' | 'stale' | 'closed'
 export type RealizationStatus = 'in_progress' | 'closure_submitted' | 'closed' | 'reopened'
 export type ClosureStatus = 'submitted' | 'accepted' | 'rejected'
 export interface AcceptanceCriterion { readonly id: string; readonly text: string }
-export interface ModuleContract { readonly objective: Prose; readonly frozenBehavior: readonly string[]; readonly scope: readonly string[]; readonly nonGoals: readonly string[]; readonly acceptance: readonly AcceptanceCriterion[] }
+export interface ModuleContract { readonly objective: Prose; readonly frozenBehavior: readonly string[]; readonly scope: readonly string[]; readonly nonGoals: readonly string[]; readonly acceptance: readonly AcceptanceCriterion[]; readonly requiredChecks: readonly { readonly id: string; readonly description: string }[]; readonly checkRationale: string }
 export interface ModuleNode { readonly kind: 'module'; readonly id: string; readonly title: string; readonly phase: string; readonly definitionStatus: DefinitionStatus; readonly dependencies: readonly ModuleNode[]; readonly contract: ModuleContract; readonly createdAt: string; readonly updatedAt: string }
 export interface Alternative { readonly id: string; readonly label: string; readonly tradeoffs?: string }
 export interface ResourceNode { readonly id: string; readonly kind: 'commit' | 'pull_request' | 'file' | 'release' | 'deployment' | 'evidence'; readonly uri: string; readonly revision?: string }
@@ -92,11 +94,11 @@ export interface FrozenDefinition {
   readonly decisions: readonly (Omit<DecisionNode, 'kind' | 'module' | 'prerequisites' | 'evidence' | 'supersedes'> & { readonly moduleId: string; readonly prerequisites: readonly string[]; readonly evidenceRefs: readonly string[]; readonly supersedes?: string })[]
 }
 export interface HandoffRevisionCorrection { readonly from: number; readonly to: number; readonly reason: string; readonly evidenceRefs: readonly string[]; readonly proposalId: string; readonly revision: number; readonly correctedAt: string }
-export interface HandoffNode { readonly expectedAssignee?: string; readonly productRevisionCorrections?: readonly HandoffRevisionCorrection[]; readonly frozenDefinition?: FrozenDefinition; readonly kind: 'handoff'; readonly id: string; readonly module: ModuleNode; readonly revision: number; readonly productRevision: number; readonly status: HandoffStatus; readonly decisions: readonly DecisionNode[]; readonly contractDigest: string; readonly createdAt: string }
+export interface HandoffNode { readonly expectedAssignee?: string; readonly productRevisionCorrections?: readonly HandoffRevisionCorrection[]; readonly frozenDefinition: FrozenDefinition; readonly kind: 'handoff'; readonly id: string; readonly module: ModuleNode; readonly revision: number; readonly productRevision: number; readonly status: HandoffStatus; readonly decisions: readonly DecisionNode[]; readonly contractDigest: string; readonly createdAt: string }
 export interface RealizationNode { readonly kind: 'realization'; readonly id: string; readonly module: ModuleNode; readonly handoff: HandoffNode; readonly handoffRevision: number; readonly status: RealizationStatus; readonly agent: string; readonly implementation: readonly ResourceNode[]; readonly startedAt: string; readonly updatedAt: string }
 export interface AcceptanceEvidenceNode { readonly acceptanceId: string; readonly evidence: readonly ResourceNode[]; readonly result: 'pass' | 'partial' | 'not_met' }
-export interface ClosureNode { readonly kind: 'closure'; readonly id: string; readonly realization: RealizationNode; readonly handoff: HandoffNode; readonly handoffRevision: number; readonly status: ClosureStatus; readonly implementation: readonly ResourceNode[]; readonly deliveredBehavior: readonly string[]; readonly acceptanceEvidence: readonly AcceptanceEvidenceNode[]; readonly checks: readonly { readonly command?: string; readonly system?: string; readonly result: 'pass' | 'fail' | 'not_run'; readonly evidence?: ResourceNode }[]; readonly deviations: readonly { readonly description: string; readonly consequence: string; readonly requiresProductDecision: boolean }[]; readonly residualRisks: readonly string[]; readonly newProductQuestions: readonly string[]; readonly deployment?: { readonly environment: string; readonly revision: string; readonly evidence: ResourceNode }; readonly migrations?: readonly string[]; readonly cleanup?: readonly string[]; readonly submittedAt: string; readonly decidedAt?: string; readonly verifier?: string; readonly rejectionReason?: string }
-export interface ProposalAuditNode { readonly kind: 'proposal-audit'; readonly id: string; readonly status: 'approved' | 'rejected'; readonly summary: string; readonly baseRevision?: number; readonly scopeDigest?: string; readonly baseDigest: string; readonly submittedAt: string; readonly decidedAt?: string; readonly rejectionReason?: string }
+export interface ClosureNode { readonly kind: 'closure'; readonly id: string; readonly realization: RealizationNode; readonly handoff: HandoffNode; readonly handoffRevision: number; readonly status: ClosureStatus; readonly implementation: readonly ResourceNode[]; readonly deliveredBehavior: readonly string[]; readonly acceptanceEvidence: readonly AcceptanceEvidenceNode[]; readonly checks: readonly { readonly id: string; readonly revision: string; readonly command?: string; readonly system?: string; readonly result: 'pass' | 'fail' | 'not_run'; readonly evidence?: ResourceNode }[]; readonly deviations: readonly { readonly description: string; readonly consequence: string; readonly requiresProductDecision: boolean }[]; readonly residualRisks: readonly string[]; readonly newProductQuestions: readonly string[]; readonly deployment?: { readonly environment: string; readonly revision: string; readonly evidence: ResourceNode }; readonly migrations?: readonly string[]; readonly cleanup?: readonly string[]; readonly submittedAt: string; readonly decidedAt?: string; readonly verifier?: string; readonly rejectionReason?: string }
+export interface ProposalAuditNode { readonly kind: 'proposal-audit'; readonly id: string; readonly status: 'approved' | 'rejected'; readonly summary: string; readonly baseRevision: number; readonly scopeDigest?: string; readonly baseDigest: string; readonly submittedAt: string; readonly decidedAt?: string; readonly rejectionReason?: string }
 export interface ProductAuthority { readonly schemaVersion: 3; readonly revision: number; readonly product: { readonly id: string; readonly title: string; readonly initialIdea: string; readonly activeSlice: string; readonly profile: string; readonly createdAt: string; readonly updatedAt: string }; readonly modules: readonly ModuleNode[]; readonly decisions: readonly DecisionNode[]; readonly proposals: readonly ProposalAuditNode[]; readonly handoffs: readonly HandoffNode[]; readonly realizations: readonly RealizationNode[]; readonly closures: readonly ClosureNode[]; readonly resources: readonly ResourceNode[] }
 `
 const assetDeclaration = `// GENERATED by Suo. Markdown is a first-class imported resource.
@@ -182,10 +184,12 @@ export async function checkSource(root: string): Promise<void> {
 }
 
 export async function saveAuthority(snapshot: SuoSnapshot, root: string): Promise<void> {
+  assertValidSnapshot(snapshot)
   const target = join(root, sourceDirectoryName)
   const temporary = join(root, `.suo-source-${process.pid.toString()}-${Date.now().toString()}`)
   await rm(temporary, { recursive: true, force: true })
   await mkdir(temporary, { recursive: true })
+  try {
   await writeFile(join(temporary, 'ontology.d.ts'), ontologyDeclaration, 'utf8')
   await writeFile(join(temporary, 'assets.d.ts'), assetDeclaration, 'utf8')
 
@@ -233,6 +237,7 @@ export async function saveAuthority(snapshot: SuoSnapshot, root: string): Promis
     if (await exists(backup)) await rename(backup, target)
     throw error
   }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
 }
 
 function normalizeAuthority(source: SourceAuthority): SuoSnapshot {
@@ -246,7 +251,7 @@ function normalizeAuthority(source: SourceAuthority): SuoSnapshot {
       handoffId: handoff.id,
       implementationRefs: implementation.map(toImplementationRef),
       acceptanceEvidence: acceptanceEvidence.map(item => ({ ...item, evidence: item.evidence.map(resource => resource.uri) })),
-      checks: checks.map(item => ({ result: item.result, ...(item.command ? { command: item.command } : {}), ...(item.system ? { system: item.system } : {}), ...(item.evidence ? { evidenceRef: item.evidence.uri } : {}) })),
+      checks: checks.map(item => ({ id: item.id, revision: item.revision, result: item.result, ...(item.command ? { command: item.command } : {}), ...(item.system ? { system: item.system } : {}), ...(item.evidence ? { evidenceRef: item.evidence.uri } : {}) })),
       ...(deployment ? { deployment: { environment: deployment.environment, revision: deployment.revision, evidenceRef: deployment.evidence.uri } } : {}),
     }
   })
@@ -519,6 +524,6 @@ async function enforceRealImportBoundary(root: string, path: string, source: ts.
   }
 }
 function inside(parent: string, child: string): boolean { return child === parent || child.startsWith(`${parent}${sep}`) }
-function toImplementationRef(value: ResourceNode): ImplementationRef { return { kind: value.kind === 'evidence' ? 'file' : value.kind, uri: value.uri, ...(value.revision ? { revision: value.revision } : {}) } }
+function toImplementationRef(value: ResourceNode): ImplementationRef { if (!value.revision?.trim()) throw new Error('implementation reference requires exact revision'); return { kind: value.kind === 'evidence' ? 'file' : value.kind, uri: value.uri, revision: value.revision } }
 function without<T extends object, K extends keyof T>(value: T, keys: readonly K[]): Omit<T, K> { const copy = { ...value }; for (const key of keys) delete copy[key]; return copy }
 

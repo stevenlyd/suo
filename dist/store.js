@@ -28,6 +28,7 @@ export async function saveSnapshot(snapshot, start = process.cwd(), options = {}
         const pending = options.initialize
             ? requestedPending
             : mergePending(await loadStagedProposals(root), requestedPending, new Set(canonical.proposals.map(value => value.id)));
+        assertValidSnapshot({ ...canonical, proposals: [...canonical.proposals, ...pending] });
         const prepared = await prepareStagedWrite(root, pending);
         try {
             if (options.initialize) {

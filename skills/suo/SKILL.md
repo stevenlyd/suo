@@ -1,7 +1,7 @@
 ---
 name: suo
 description: "Use when an idea needs one bounded Product decision."
-version: 0.5.0
+version: 0.6.0
 license: MIT
 compatibility: "Requires Node.js 22.18+ and the suo CLI."
 metadata:
@@ -68,7 +68,7 @@ The person talks naturally. Do not ask them to write JSON, remember entity IDs, 
 
 Use stable module/decision IDs for independently decidable outcomes, not branches or fixed people roles. “Keep replies and avatars, think more about Profile” authorizes only the bounded selected decisions; leave Profile experimental or pending. Keep experiment proposals distinct from official frozen behavior and approved decision history. Do not freeze an entire mixed experiment as the accepted contract. Multiple features may share implementation branches.
 
-Include `expectedRevision` from the just-inspected snapshot in proposal submissions. A mismatch stops submission; inspect the new authority and reconcile the actual decision. New bounded edits to existing independent modules may commute across unrelated approvals. Structural edits, dependencies and legacy proposals retain the global stale guard. Same-feature conflicts show proposal provenance; never silently choose a collaborator's decision or resubmit against a fresh revision without reviewing the changed meaning.
+Include `expectedRevision` from the just-inspected snapshot in proposal submissions. A mismatch stops submission; inspect the new authority and reconcile the actual decision. New bounded edits to existing independent modules may commute across unrelated approvals. Structural edits and dependencies retain the global stale guard. Same-feature conflicts show proposal provenance; never silently choose a collaborator's decision or resubmit against a fresh revision without reviewing the changed meaning.
 
 A `freeze_module` operation may include `expectedAssignee`. This becomes durable handoff metadata, not assignment acceptance, work-start evidence, a fixed role, or deployment permission. Either Steven or Quinn can be the expected assignee. Deliver the exact handoff, accepted scope, rationale, dependencies and unresolved questions. Keep live-user acceptance separate from product agreement; an external implementation agent still cannot accept its own closure.
 
@@ -93,3 +93,11 @@ Reject or reopen closure when:
 
 Do not decompose implementation tasks, choose ordinary coding details, orchestrate development agents, or deploy software. Suo ends Product definition at a versioned handoff and resumes when evidence returns for closure.
 
+
+## Deterministic validation and upgrades
+
+New proposal envelopes require the actually observed `expectedRevision`. Closure submissions require the observed `handoffRevision`, exact implementation revisions, exact frozen acceptance/check ID coverage and nonempty evidence for every passing item. Define `requiredChecks` and `checkRationale` before freezing; an empty set needs explicit Product justification. Failed/not-run checks may be submitted for review but cannot be accepted. Never add blanket tests or invent evidence to satisfy a schema.
+
+Gather fresh authoritative evidence from the actual Git/check/behavior sources before reporting delivery. Inspect source identifiers, revisions and results; disclose unavailable verification. Suo checks supplied structure and consistency, not provider truth. A supplied URL is not an independently verified result. Agent/verifier names are declared, not authenticated identities. Product agreement neither proves live-user acceptance nor grants deployment permission.
+
+Incomplete historical authority is blocked under 0.6.0, not grandfathered. Use read-only `suo diagnose <raw-snapshot.json>` and the [explicit completion guide](https://github.com/stevenlyd/suo/blob/main/docs/validation-upgrade.md) at the installed revision. Preserve original raw audit data. Recover only objectively supported facts; missing Product decisions or real evidence stay needs-completion. Do not fill an absent baseline with the current revision, copy current contracts into old freezes, rewrite Vault history, or migrate a live project without authorization.

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { assertSubmission } from './protocol.js';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { adoptVaultNote, approveVaultDraft, compileVault, initVault, readVaultDraft, recoverVault } from './vault.js';
@@ -39,6 +40,14 @@ try {
         case 'check':
             await checkCommand();
             break;
+        case 'diagnose': {
+            const raw = JSON.parse(await readFile(resolve(requiredArg('snapshot JSON path')), 'utf8'));
+            const issues = validateSnapshot(raw);
+            print({ status: issues.length ? 'needs-completion' : 'valid', issues, verification: 'Structural validation only; supplied evidence and declared identity are not independently authenticated.' });
+            if (issues.length)
+                process.exitCode = 1;
+            break;
+        }
         case 'help':
         case '--help':
         case '-h':
@@ -244,8 +253,7 @@ function requiredArg(label) { const value = argv.shift(); if (!value || value.st
 async function readSubmission(path) {
     const text = path === '-' ? await readStdin() : await readFile(path, 'utf8');
     const value = JSON.parse(text);
-    if (value.kind !== 'proposal' && value.kind !== 'closure')
-        throw new Error('submission kind must be proposal or closure');
+    assertSubmission(value);
     return value;
 }
 async function readStdin() {
@@ -286,6 +294,7 @@ Usage:
   suo reject <closure-id> --reason <reason> --verifier <identity>
   suo inspect [record-id] [--json]
   suo check
+  suo diagnose <raw-snapshot.json>
   suo vault init [directory] --idea <idea> [--title <title>]
   suo vault adopt <note.md> --kind module|decision [--module "[[Module note]]"]
   suo vault check

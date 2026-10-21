@@ -9,7 +9,7 @@ export const end = '<!-- /suo:content -->';
 const common = ['suo_id', 'suo_kind', 'suo_title'];
 const fields = {
     product: [...common, 'suo_slice', 'suo_profile'],
-    module: [...common, 'suo_phase', 'suo_dependencies', 'suo_frozen_behavior', 'suo_scope', 'suo_non_goals', 'suo_acceptance'],
+    module: [...common, 'suo_phase', 'suo_dependencies', 'suo_frozen_behavior', 'suo_scope', 'suo_non_goals', 'suo_acceptance', 'suo_required_checks', 'suo_check_rationale'],
     decision: [...common, 'suo_module', 'suo_alternatives', 'suo_recommendation', 'suo_prerequisites', 'suo_evidence'],
 };
 export const hash = (value) => createHash('sha256').update(value).digest('hex');
@@ -152,6 +152,8 @@ export function renderNote(note, kind, value, paths) {
         set('suo_scope', m.contract.scope);
         set('suo_non_goals', m.contract.nonGoals);
         set('suo_acceptance', m.contract.acceptance);
+        set('suo_required_checks', m.contract.requiredChecks);
+        set('suo_check_rationale', m.contract.checkRationale);
         content = proseText(m.contract.objective);
     }
     else {
@@ -184,8 +186,11 @@ export function enrollNote(raw, id, kind, title, moduleLink) {
         throw new Error('frontmatter must be a mapping');
     document.set('suo_id', id);
     document.set('suo_kind', kind);
-    if (kind === 'module')
+    if (kind === 'module') {
         document.set('suo_title', title);
+        document.set('suo_required_checks', []);
+        document.set('suo_check_rationale', '');
+    }
     else {
         if (!moduleLink)
             throw new Error('decision enrollment requires --module "[[Module note]]"');

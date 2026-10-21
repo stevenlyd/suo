@@ -19,13 +19,13 @@ const contract: ModuleContract = {
   frozenBehavior: ['Behavior is explicit.'],
   scope: ['One outcome'],
   nonGoals: ['Implementation planning'],
-  acceptance: [{ id: 'observable', text: 'The outcome can be observed.' }],
+  requiredChecks: [], checkRationale: 'Manual observation suffices for this fixture.', acceptance: [{ id: 'observable', text: 'The outcome can be observed.' }],
 }
 
 async function populatedProject(): Promise<{ root: string; snapshot: SuoSnapshot }> {
   const root = await mkdtemp(join(tmpdir(), 'suo-source-'))
   let snapshot = createProduct({ title: 'Imported graph', idea: 'Use TypeScript imports as authority.' }, { now: '2026-01-01T00:00:00.000Z', id: 'product:test' })
-  snapshot = stageProposal(snapshot, {
+  snapshot = stageProposal(snapshot, { expectedRevision: snapshot.revision,
     kind: 'proposal',
     id: 'proposal:graph',
     summary: 'Create an imported module graph',
@@ -52,7 +52,7 @@ describe('TypeScript ontology authority', () => {
     try {
       let snapshot = await loadSnapshot(root)
       const apply = async (id: string, operations: import('../src/model.js').ProductOperation[]) => {
-        snapshot = approveProposal(stageProposal(snapshot, { kind: 'proposal', id, summary: id, operations }), id)
+        snapshot = approveProposal(stageProposal(snapshot, { expectedRevision: snapshot.revision, kind: 'proposal', id, summary: id, operations }), id)
         await saveSnapshot(snapshot, root)
         snapshot = await loadSnapshot(root)
       }
@@ -84,19 +84,13 @@ describe('TypeScript ontology authority', () => {
     }
   }, 30_000)
 
-  it('loads legacy repo-ts handoffs without backfilling current definitions', async () => {
+  it('rejects incomplete historical repo-ts handoffs without changing authority', async () => {
     const { root, snapshot } = await populatedProject()
     try {
       const legacy = freezeModule(snapshot, 'module:foundation')
-      delete legacy.handoffs[0]!.frozenDefinition
-      await saveAuthority(legacy, root)
-      const loaded = await loadSnapshot(root)
-      expect(loaded.handoffs[0]!.frozenDefinition).toBeUndefined()
-      await generateArtifacts(loaded, root)
-      const output = await readFile(join(root, 'docs/suo/HANDOFFS/handoff_module_foundation_1.md'), 'utf8')
-      expect(output).toContain('Historical content unavailable')
-      expect(output).not.toContain(contract.objective)
-      expect((await loadSnapshot(root)).handoffs[0]!.frozenDefinition).toBeUndefined()
+      Reflect.deleteProperty(legacy.handoffs[0]!, 'frozenDefinition')
+      await expect(saveAuthority(legacy, root)).rejects.toThrow('frozenDefinition')
+      expect((await loadSnapshot(root)).handoffs).toEqual([])
     } finally { await rm(root, { recursive: true, force: true }) }
   }, 30_000)
 
@@ -274,7 +268,7 @@ describe('TypeScript ontology authority', () => {
     await saveSnapshot(initial, root, { initialize: true })
     const authorityBefore = await readFile(join(root, 'suo/product.suo.ts'), 'utf8')
     await mkdir(join(root, '.suo/staged/proposals.json'), { recursive: true })
-    const staged = stageProposal(initial, { kind: 'proposal', id: 'proposal:failure', summary: 'Must remain transient', operations: [{ type: 'create_module', module: { id: 'module:nope', title: 'Nope' } }] })
+    const staged = stageProposal(initial, { expectedRevision: initial.revision, kind: 'proposal', id: 'proposal:failure', summary: 'Must remain transient', operations: [{ type: 'create_module', module: { id: 'module:nope', title: 'Nope' } }] })
     await expect(saveSnapshot(staged, root)).rejects.toThrow()
     expect(await readFile(join(root, 'suo/product.suo.ts'), 'utf8')).toBe(authorityBefore)
   })
@@ -294,8 +288,8 @@ describe('TypeScript ontology authority', () => {
     const root = await mkdtemp(join(tmpdir(), 'suo-concurrent-proposals-'))
     const initial = createProduct({ title: 'Concurrent', idea: 'Keep both proposals.' }, { now: '2026-01-01T00:00:00.000Z', id: 'product:concurrent' })
     await saveSnapshot(initial, root, { initialize: true })
-    const left = stageProposal(await loadSnapshot(root), { kind: 'proposal', id: 'proposal:left', summary: 'Left', operations: [{ type: 'create_module', module: { id: 'module:left', title: 'Left' } }] }, { now: '2026-01-01T00:01:00.000Z' })
-    const right = stageProposal(await loadSnapshot(root), { kind: 'proposal', id: 'proposal:right', summary: 'Right', operations: [{ type: 'create_module', module: { id: 'module:right', title: 'Right' } }] }, { now: '2026-01-01T00:02:00.000Z' })
+    const left = stageProposal(await loadSnapshot(root), { expectedRevision: initial.revision, kind: 'proposal', id: 'proposal:left', summary: 'Left', operations: [{ type: 'create_module', module: { id: 'module:left', title: 'Left' } }] }, { now: '2026-01-01T00:01:00.000Z' })
+    const right = stageProposal(await loadSnapshot(root), { expectedRevision: initial.revision, kind: 'proposal', id: 'proposal:right', summary: 'Right', operations: [{ type: 'create_module', module: { id: 'module:right', title: 'Right' } }] }, { now: '2026-01-01T00:02:00.000Z' })
     await saveSnapshot(left, root)
     await saveSnapshot(right, root)
     expect((await loadSnapshot(root)).proposals.map(value => value.id).sort()).toEqual(['proposal:left', 'proposal:right'])
@@ -308,7 +302,7 @@ describe('TypeScript ontology authority', () => {
     const initial = createProduct({ title: 'Root discovery', idea: 'Find the project root.' }, { now: '2026-01-01T00:00:00.000Z', id: 'product:root' })
     await saveSnapshot(initial, root, { initialize: true })
     const authorityBefore = await readFile(join(root, 'suo/product.suo.ts'), 'utf8')
-    const staged = stageProposal(initial, { kind: 'proposal', id: 'proposal:pending', summary: 'Pending only', operations: [{ type: 'create_module', module: { id: 'module:pending', title: 'Pending' } }] }, { now: '2026-01-01T00:01:00.000Z' })
+    const staged = stageProposal(initial, { expectedRevision: initial.revision, kind: 'proposal', id: 'proposal:pending', summary: 'Pending only', operations: [{ type: 'create_module', module: { id: 'module:pending', title: 'Pending' } }] }, { now: '2026-01-01T00:01:00.000Z' })
     expect(staged.revision).toBe(initial.revision)
     await saveSnapshot(staged, nested)
 

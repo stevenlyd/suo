@@ -8,16 +8,31 @@ const root = await mkdtemp(join(tmpdir(), 'suo-cli-'))
 const clone = await mkdtemp(join(tmpdir(), 'suo-cli-clone-'))
 const cli = process.env.SUO_TEST_CLI ?? resolve('dist/cli.js')
 const run = (project, ...args) => execFileSync(process.execPath, [cli, ...args, '--root', project], { encoding: 'utf8' })
-const contract = { objective: 'Original CLI objective', frozenBehavior: ['Original behavior'], scope: ['Feature'], nonGoals: ['Other features'], acceptance: [{ id: 'observable', text: 'Observable outcome' }] }
+const contract = { objective: 'Original CLI objective', frozenBehavior: ['Original behavior'], scope: ['Feature'], nonGoals: ['Other features'], requiredChecks: [], checkRationale: 'Manual CLI observation is the acceptance check.', acceptance: [{ id: 'observable', text: 'Observable outcome' }] }
 try {
   run(root, 'init', root, '--idea', 'CLI regression')
   const approve = async (id, operations) => {
     const path = join(root, 'proposal.json')
-    await writeFile(path, JSON.stringify({ kind: 'proposal', id, summary: id, operations }))
+    await writeFile(path, JSON.stringify({ kind: 'proposal', expectedRevision: JSON.parse(run(root, 'inspect')).revision, id, summary: id, operations }))
     run(root, 'submit', path)
     run(root, 'approve', id, '--yes')
   }
-  await approve('proposal:first', [
+  const before = await readFile(join(root, 'suo/product.suo.ts'), 'utf8')
+  for (const raw of ['{', JSON.stringify({ kind: 'proposal', summary: 'Missing baseline', operations: [{ type: 'freeze_module' }] })]) {
+    const invalid = join(root, 'invalid.json'); await writeFile(invalid, raw)
+    assert.throws(() => run(root, 'submit', invalid))
+    assert.equal(await readFile(join(root, 'suo/product.suo.ts'), 'utf8'), before)
+  }
+  const snapshotPath = join(root, 'snapshot.json')
+  const inspected = JSON.parse(run(root, 'inspect'))
+  const snapshot = { schemaVersion: 2, revision: inspected.revision, product: inspected.product, modules: [], decisions: [], proposals: [], handoffs: [], realizations: [], closures: [] }
+  await writeFile(snapshotPath, JSON.stringify(snapshot))
+  assert.equal(JSON.parse(run(root, 'diagnose', snapshotPath)).status, 'valid')
+  const badSnapshot = JSON.stringify({ ...snapshot, extra: true })
+  await writeFile(snapshotPath, badSnapshot)
+  assert.throws(() => run(root, 'diagnose', snapshotPath))
+  assert.equal(await readFile(snapshotPath, 'utf8'), badSnapshot)
+  await approve('proposal:first' , [
     { type: 'create_module', module: { id: 'module:feature', title: 'Feature', contract } },
     { type: 'freeze_module', moduleId: 'module:feature' },
   ])

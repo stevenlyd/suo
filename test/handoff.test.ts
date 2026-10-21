@@ -4,7 +4,7 @@ import { renderHandoff } from '../src/render.js'
 import { validateSnapshot } from '../src/validation.js'
 import type { ModuleContract } from '../src/model.js'
 
-const contract: ModuleContract = { objective: 'Original objective', frozenBehavior: ['Original behavior'], scope: ['Original scope'], nonGoals: ['Original non-goal'], acceptance: [{ id: 'a', text: 'Original acceptance' }] }
+const contract: ModuleContract = { objective: 'Original objective', frozenBehavior: ['Original behavior'], scope: ['Original scope'], nonGoals: ['Original non-goal'], requiredChecks: [], checkRationale: 'Manual observation suffices for this fixture.', acceptance: [{ id: 'a', text: 'Original acceptance' }] }
 function frozen() {
   let snapshot = createModule(createProduct({ title: 'Test', idea: 'Test idea' }), { id: 'module:a', title: 'Original title', contract })
   snapshot = proposeDecision(snapshot, { id: 'decision:a', moduleId: 'module:a', question: 'Original question', alternatives: [], prerequisites: [], evidenceRefs: [] })
@@ -26,30 +26,11 @@ describe('frozen handoff projections', () => {
     expect(validateSnapshot(next)).toEqual([])
   })
 
-  it('keeps old records valid but omits unproven bodies even when the current digest matches', () => {
+  it('blocks historical records without frozen authority instead of fabricating it', () => {
     const snapshot = frozen()
-    delete snapshot.handoffs[0]!.frozenDefinition
-    expect(validateSnapshot(snapshot)).toEqual([])
-    const output = renderHandoff(snapshot, snapshot.handoffs[0]!)
-    expect(output).toContain('Historical content unavailable')
-    expect(output).not.toContain('Original objective')
-    expect(output).not.toContain('Original question')
-    expect(output).toContain(snapshot.handoffs[0]!.contractDigest)
-  })
-
-  it('uses verified legacy history and rejects mismatching history', () => {
-    const original = frozen()
-    delete original.handoffs[0]!.frozenDefinition
-    const next = updateModule(original, 'module:a', { contract: { ...contract, objective: 'New objective' } })
-    const legacy = renderHandoff(next, next.handoffs[0]!, original)
-    expect(legacy).toContain('Original objective')
-    expect(legacy).toContain('Legacy history:')
-    expect(legacy).not.toContain('# Handoff: Original title')
-    expect(legacy).not.toContain('Original question')
-    expect(renderHandoff(next, next.handoffs[0]!, next)).toContain('Historical content unavailable')
-    const wrong = structuredClone(original)
-    wrong.handoffs[0]!.revision++
-    expect(renderHandoff(next, next.handoffs[0]!, wrong)).toContain('Historical content unavailable')
+    Reflect.deleteProperty(snapshot.handoffs[0]!, 'frozenDefinition')
+    expect(validateSnapshot(snapshot).join()).toContain('frozenDefinition')
+    expect(() => updateModule(snapshot, 'module:a', { title: 'New' })).toThrow('invalid Suo snapshot')
   })
 
   it('rejects altered frozen contracts, decision membership and malformed payloads', () => {

@@ -16,6 +16,11 @@ export interface AcceptanceCriterion {
     text: string;
 }
 export interface ModuleContract {
+    requiredChecks: Array<{
+        id: string;
+        description: string;
+    }>;
+    checkRationale: string;
     objective: Prose;
     frozenBehavior: string[];
     scope: string[];
@@ -68,7 +73,7 @@ export interface HandoffRevisionCorrection {
 export interface Handoff {
     expectedAssignee?: string;
     productRevisionCorrections?: HandoffRevisionCorrection[];
-    frozenDefinition?: FrozenDefinition;
+    frozenDefinition: FrozenDefinition;
     id: string;
     moduleId: string;
     revision: number;
@@ -81,7 +86,7 @@ export interface Handoff {
 export interface ImplementationRef {
     kind: 'commit' | 'pull_request' | 'file' | 'release' | 'deployment';
     uri: string;
-    revision?: string;
+    revision: string;
 }
 export interface Realization {
     id: string;
@@ -106,10 +111,13 @@ export interface ClosureDeviation {
     requiresProductDecision: boolean;
 }
 export interface ClosureSubmission {
+    handoffRevision: number;
     implementationRefs: ImplementationRef[];
     deliveredBehavior: string[];
     acceptanceEvidence: AcceptanceEvidence[];
     checks: Array<{
+        id: string;
+        revision: string;
         command?: string;
         system?: string;
         result: 'pass' | 'fail' | 'not_run';
@@ -222,7 +230,7 @@ export interface Proposal {
     id: string;
     status: ProposalStatus;
     summary: string;
-    baseRevision?: number;
+    baseRevision: number;
     scopeDigest?: string;
     baseDigest: string;
     operations: ProductOperation[];
@@ -231,7 +239,7 @@ export interface Proposal {
     rejectionReason?: string;
 }
 export interface ProposalSubmission {
-    expectedRevision?: number;
+    expectedRevision: number;
     kind: 'proposal';
     id?: string;
     summary: string;

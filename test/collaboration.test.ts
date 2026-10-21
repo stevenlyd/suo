@@ -22,16 +22,16 @@ for (const [sender, receiver] of [['Steven','Quinn'], ['Quinn','Steven']]) {
 it('rejects stale submission and conflicting same-feature decisions with provenance', () => {
   let s = fixture()
   const baseline = s.revision
-  for (const id of ['steven','quinn']) s = stageProposal(s,{kind:'proposal',id:`proposal:${id}`,summary:id,operations:[{type:'update_module',moduleId:'module:profile',patch:{title:id}}]})
+  for (const id of ['steven','quinn']) s = stageProposal(s, { expectedRevision: s.revision,kind:'proposal',id:`proposal:${id}`,summary:id,operations:[{type:'update_module',moduleId:'module:profile',patch:{title:id}}]})
   s = approveProposal(s,'proposal:steven')
   expect(()=>approveProposal(s,'proposal:quinn')).toThrow(/proposal:steven: steven/)
   expect(()=>stageProposal(s,{kind:'proposal',summary:'late',expectedRevision:baseline,operations:[{type:'update_module',moduleId:'module:avatars',patch:{title:'late'}}]})).toThrow(/baseline conflict/)
 })
 it('legacy proposals retain their conservative global guard', () => {
   let s = fixture()
-  s = stageProposal(s,{kind:'proposal',id:'proposal:old',summary:'old',operations:[{type:'update_module',moduleId:'module:avatars',patch:{title:'old'}}]})
+  s = stageProposal(s, { expectedRevision: s.revision,kind:'proposal',id:'proposal:old',summary:'old',operations:[{type:'update_module',moduleId:'module:avatars',patch:{title:'old'}}]})
   delete s.proposals[0]!.scopeDigest
-  s = stageProposal(s,{kind:'proposal',id:'proposal:new',summary:'new',operations:[{type:'update_module',moduleId:'module:replies',patch:{title:'new'}}]})
+  s = stageProposal(s, { expectedRevision: s.revision,kind:'proposal',id:'proposal:new',summary:'new',operations:[{type:'update_module',moduleId:'module:replies',patch:{title:'new'}}]})
   s = approveProposal(s,'proposal:new')
   expect(()=>approveProposal(s,'proposal:old')).toThrow(/stale/)
 })
@@ -43,8 +43,8 @@ it('expected assignee survives authority roundtrip without claimed work or accep
   const root = await mkdtemp(join(tmpdir(),'suo-handoff-owner-'))
   try {
     let s = fixture()
-    s = stageProposal(s,{kind:'proposal',id:'proposal:handoff',summary:'Quinn to Steven',operations:[
-      {type:'update_module',moduleId:'module:replies',patch:{contract:{objective:'Reply',frozenBehavior:['Thread replies'],scope:['Replies'],nonGoals:['Profile'],acceptance:[{id:'reply',text:'Reply is visible'}]}}},
+    s = stageProposal(s, { expectedRevision: s.revision,kind:'proposal',id:'proposal:handoff',summary:'Quinn to Steven',operations:[
+      {type:'update_module',moduleId:'module:replies',patch:{contract:{objective:'Reply',frozenBehavior:['Thread replies'],scope:['Replies'],nonGoals:['Profile'],requiredChecks: [], checkRationale: 'Manual observation suffices for this fixture.', acceptance:[{id:'reply',text:'Reply is visible'}]}}},
       {type:'freeze_module',moduleId:'module:replies',expectedAssignee:'Steven'}
     ]})
     s = approveProposal(s,'proposal:handoff')
@@ -61,6 +61,6 @@ it('cross-feature decision prerequisites retain the global conflict guard', asyn
   let s = fixture()
   s = proposeDecision(s,{id:'decision:base',moduleId:'module:profile',question:'Base?',alternatives:[],prerequisites:[],evidenceRefs:[]})
   s = proposeDecision(s,{id:'decision:dependent',moduleId:'module:replies',question:'Dependent?',alternatives:[],prerequisites:['decision:base'],evidenceRefs:[]})
-  s = stageProposal(s,{kind:'proposal',summary:'replies',operations:[{type:'update_module',moduleId:'module:replies',patch:{title:'Reply'}}]})
+  s = stageProposal(s, { expectedRevision: s.revision,kind:'proposal',summary:'replies',operations:[{type:'update_module',moduleId:'module:replies',patch:{title:'Reply'}}]})
   expect(s.proposals[0]?.scopeDigest).toBeUndefined()
 })

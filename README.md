@@ -88,6 +88,8 @@ const value = {
     frozenBehavior: ["Only authorized clients can open the gallery."],
     scope: ["Private gallery viewing"],
     nonGoals: ["Public portfolio publishing"],
+    requiredChecks: [],
+    checkRationale: 'This contract is verified through manual observation.',
     acceptance: [
       { id: "authorized-access", text: "An authorized client can open the gallery." },
     ],
@@ -135,6 +137,7 @@ suo approve
 suo reject
 suo inspect
 suo check
+suo diagnose <raw-snapshot.json>
 ```
 
 ### One next action
@@ -150,6 +153,8 @@ suo next --json
 suo submit examples/proposal-intake.json
 suo approve proposal:intake --yes
 ```
+
+Set the example’s `expectedRevision` to the revision actually inspected and reviewed for this submission. The numbered examples assume a fresh project and sequential approvals.
 
 Submission JSON is only a protocol envelope staged under `.suo/`; it is not Product authority. Approval checks the proposal base digest, applies the change through the project’s adapter, validates the model, and regenerates `docs/suo/`. The TS adapter updates imported source files; the Obsidian adapter updates enrolled notes and appends a durable revision record.
 
@@ -168,7 +173,7 @@ suo approve closure:intake --yes --verifier owner
 
 Every closure must name a non-empty implementation-agent identity. Suo normalizes surrounding whitespace and prevents that identity from approving or rejecting its own closure.
 
-The kernel rejects stale handoffs, incomplete acceptance evidence, failed checks, unresolved Product deviations, and new Product questions.
+Submission rejects stale handoffs, malformed payloads and incomplete/duplicate/unknown acceptance or required-check coverage. Acceptance also rejects failed checks, unresolved Product deviations and new Product questions. See [strict guarantees and completion of older records](docs/validation-upgrade.md).
 
 ### Inspect and check
 
@@ -176,6 +181,7 @@ The kernel rejects stale handoffs, incomplete acceptance evidence, failed checks
 suo inspect
 suo inspect handoff:module:intake:1 --json
 suo check
+suo diagnose <raw-snapshot.json>
 ```
 
 `suo check` performs TypeScript compilation, import reachability, Markdown resolution and hashing, ID uniqueness, definition-DAG validation, lifecycle validation, closure validation, and generated-document reconciliation.
@@ -209,6 +215,8 @@ suo_dependencies:
 suo_frozen_behavior: [Only authorized clients can view photos.]
 suo_scope: [Private viewing]
 suo_non_goals: [Public publishing]
+suo_required_checks: []
+suo_check_rationale: Manual observation is sufficient for this example.
 suo_acceptance:
   - id: authorized
     text: An authorized client can view their photos.
@@ -316,9 +324,7 @@ New freezes retain a `frozenDefinition` value in the existing handoff record: th
 
 The outer module/decision relationships remain typed imports. IDs inside the frozen value are historical data, not a second editable graph or references to current definitions. Do not edit frozen records to update Product definitions; approve a change and freeze a new handoff instead. The existing contract digest is checked against the saved value; it is not an authenticity signature and does not cover every display field.
 
-This is an optional additive field in compiled schema 2 / source schema 3, with no data migration or rewrite of past approvals. Older records remain readable. For a legacy Vault handoff, Suo checks its first appearance in verified history against the recorded digest. Because legacy digests did not cover titles or decision questions, those fields are displayed as stable IDs with a provenance notice. If no matching original snapshot exists (including legacy repo-ts records), the generated page preserves identity, revision, status and digest but explicitly marks historical content unavailable. It never substitutes the current contract, even if its digest matches.
-
-A digest cannot recover missing text. Trusted backups or Git-pinned original source/views may supply historical evidence for manual review; this update does not automatically import or invent that evidence. Earlier executables do not understand the new optional field: use 0.3.1 or newer once new handoffs have been frozen. Bundled `dist/` is rebuilt with this fix; no package publication or installation change is required by this source change.
+Since 0.6.0, frozen definitions and the strict acceptance/check fields are mandatory. Incomplete historical records are blocked until explicitly completed from real evidence and reviewed decisions. See [validation and upgrade policy](docs/validation-upgrade.md); raw historical data remains audit material, not validated current authority.
 
 ### Product revision provenance (0.4.1)
 
@@ -328,4 +334,4 @@ Before 0.4.1, batch operations incremented temporary counters and froze those va
 
 For a proven historical metadata error, submit an explicitly reviewed `correct_handoff_product_revision` proposal operation with `handoffId`, `expectedFrom`, `to`, `reason` and nonempty `evidenceRefs` pointing to fixed historical evidence. Approve through the normal protocol only with owner authorization. The operation requires a previously committed handoff, checks the expected old value, and appends `productRevisionCorrections` containing the original/replacement values, correction commit/time, proposal ID and evidence. It changes no contract, digest, handoff sequence, original creation timestamp, lifecycle status or old approval. This is an audited correction, not a new freeze or a claim of recovered historical content. The new Product commit records the correction; the corrected `productRevision` still points to the original creation commit. Review the evidence independently: Suo cannot infer its truth from a URL.
 
-The correction audit is optional/additive in runtime schema 2 and source schema 3. Old records remain readable; once corrections are recorded use 0.4.1 or newer because older validators reject the new field. Vault history remains append-only; repo-ts retains the correction within the handoff source so it travels with clean copies. Generated handoff pages display the correction and its evidence. No automatic migration or global installation change is performed. Cross-store tests use the same Product and continuous history; this is not a general-purpose legacy import/migration guarantee.
+The correction audit travels with typed authority and is preserved in append-only Vault history. Strict validation applies before correction; invalid historical input requires the explicit completion workflow rather than a bypass. No live project migration is included.
