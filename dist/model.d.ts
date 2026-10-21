@@ -66,6 +66,7 @@ export interface HandoffRevisionCorrection {
     correctedAt: string;
 }
 export interface Handoff {
+    expectedAssignee?: string;
     productRevisionCorrections?: HandoffRevisionCorrection[];
     frozenDefinition?: FrozenDefinition;
     id: string;
@@ -203,6 +204,7 @@ export type ProductOperation = {
 } | {
     type: 'freeze_module';
     moduleId: string;
+    expectedAssignee?: string;
 } | {
     type: 'correct_handoff_product_revision';
     handoffId: string;
@@ -220,6 +222,8 @@ export interface Proposal {
     id: string;
     status: ProposalStatus;
     summary: string;
+    baseRevision?: number;
+    scopeDigest?: string;
     baseDigest: string;
     operations: ProductOperation[];
     submittedAt: string;
@@ -227,6 +231,7 @@ export interface Proposal {
     rejectionReason?: string;
 }
 export interface ProposalSubmission {
+    expectedRevision?: number;
     kind: 'proposal';
     id?: string;
     summary: string;

@@ -365,6 +365,8 @@ export function reopenClosure(snapshot, realizationId, reason, options = {}) {
     return commit(next, timestamp);
 }
 export function stageProposal(snapshot, input, options = {}) {
+    if (input.expectedRevision !== undefined && (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision !== snapshot.revision))
+        throw new Error(`proposal baseline conflict: expected ${input.expectedRevision}, current ${snapshot.revision}; inspect current authority before resubmitting`);
     if (!input.summary.trim())
         throw new Error('proposal summary is required');
     if (!input.operations.length)
@@ -374,10 +376,13 @@ export function stageProposal(snapshot, input, options = {}) {
         throw new Error(`proposal already exists: ${proposalId}`);
     const timestamp = now(options.now);
     const next = copy(snapshot);
+    const scopeDigest = proposalScopeDigest(snapshot, input.operations);
     const proposal = {
         id: proposalId,
         status: 'pending',
         summary: input.summary.trim(),
+        baseRevision: snapshot.revision,
+        ...(scopeDigest ? { scopeDigest } : {}),
         baseDigest: definitionDigest(snapshot),
         operations: structuredClone(input.operations),
         submittedAt: timestamp,
@@ -389,8 +394,10 @@ export function approveProposal(snapshot, proposalId, options = {}) {
     const proposal = requireProposal(snapshot, proposalId);
     if (proposal.status !== 'pending')
         throw new Error(`proposal is ${proposal.status}`);
-    if (proposal.baseDigest !== definitionDigest(snapshot))
-        throw new Error('proposal is stale; submit a revised proposal against current Product authority');
+    if (proposal.baseDigest !== definitionDigest(snapshot) && (!proposal.scopeDigest || proposal.scopeDigest !== proposalScopeDigest(snapshot, proposal.operations))) {
+        const provenance = snapshot.proposals.filter(value => value.status === 'approved').map(value => `${value.id}: ${value.summary}`).join('; ');
+        throw new Error(`proposal is stale; Product conflict for ${proposal.id} (baseline ${proposal.baseRevision ?? 'unknown'}, current ${snapshot.revision}). Inspect current authority and approved decision provenance: ${provenance || 'direct authority change'}; submit a revised proposal`);
+    }
     const timestamp = now(options.now);
     let next = copy(snapshot);
     const existingHandoffs = new Set(snapshot.handoffs.map(value => value.id));
@@ -659,6 +666,42 @@ function downstream(snapshot, moduleId) {
     return [...result].sort();
 }
 function unlockCount(snapshot, moduleId) { return downstream(snapshot, moduleId).length; }
+/** Only bounded edits to existing modules can commute. Structural operations keep
+ * the global guard. Include relationships and lifecycle evidence conservatively. */
+function proposalScopeDigest(snapshot, operations) {
+    const ids = new Set();
+    for (const operation of operations) {
+        if (operation.type === 'update_module')
+            ids.add(operation.moduleId);
+        else if (['update_decision', 'approve_decision', 'defer_decision'].includes(operation.type) && 'decisionId' in operation) {
+            const decision = snapshot.decisions.find(value => value.id === operation.decisionId);
+            if (!decision)
+                return undefined;
+            ids.add(decision.moduleId);
+        }
+        else
+            return undefined;
+    }
+    if (!ids.size || [...ids].some(id => !snapshot.modules.some(value => value.id === id)))
+        return undefined;
+    // Any dependency connection to these modules retains the global guard.
+    if (snapshot.modules.some(value => ids.has(value.id) ? value.dependencies.length > 0 : value.dependencies.some(id => ids.has(id))))
+        return undefined;
+    if (snapshot.decisions.some(value => value.prerequisites.some(prerequisite => {
+        const dependency = snapshot.decisions.find(item => item.id === prerequisite);
+        return !dependency || ids.has(value.moduleId) !== ids.has(dependency.moduleId);
+    })))
+        return undefined;
+    return createHash('sha256').update(JSON.stringify({
+        product: { ...snapshot.product, updatedAt: undefined },
+        modules: snapshot.modules.filter(value => ids.has(value.id)),
+        decisions: snapshot.decisions.filter(value => ids.has(value.moduleId)),
+        handoffs: snapshot.handoffs.filter(value => ids.has(value.moduleId)),
+        realizations: snapshot.realizations.filter(value => ids.has(value.moduleId)),
+        // Cross-module decision prerequisites can affect readiness.
+        prerequisites: snapshot.decisions.map(value => [value.id, value.prerequisites]),
+    })).digest('hex');
+}
 function definitionDigest(snapshot) {
     return createHash('sha256').update(JSON.stringify({
         product: {
@@ -711,7 +754,15 @@ function applyProductOperation(snapshot, operation, timestamp, approval) {
             ...(operation.successorId ? { id: operation.successorId } : {}),
             now: timestamp,
         });
-        case 'freeze_module': return freezeModule(snapshot, operation.moduleId, options);
+        case 'freeze_module': {
+            if (operation.expectedAssignee !== undefined && (typeof operation.expectedAssignee !== 'string' || !operation.expectedAssignee.trim()))
+                throw new Error('expected assignee must be nonempty');
+            const next = freezeModule(snapshot, operation.moduleId, options);
+            const handoff = next.handoffs.find(value => value.moduleId === operation.moduleId && value.status === 'current');
+            if (operation.expectedAssignee !== undefined && handoff)
+                handoff.expectedAssignee = operation.expectedAssignee.trim();
+            return next;
+        }
         case 'correct_handoff_product_revision': {
             const next = copy(snapshot);
             const handoff = requireHandoff(next, operation.handoffId);
