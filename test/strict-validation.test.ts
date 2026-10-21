@@ -15,7 +15,7 @@ function fixture() {
   for (const id of ['replies', 'avatars']) { s = createModule(s, { id, title: id, contract }); s = freezeModule(s, id) }
   return startRealization(s, s.handoffs[0]!.id, { id: 'implementation', agent: 'Steven' })
 }
-const evidence = (): ClosureSubmission => ({ handoffRevision: 1, implementationRefs: [{ kind: 'commit', uri: 'https://example.test/commit/a', revision: 'a' }], deliveredBehavior: ['Reply appears'], acceptanceEvidence: [{ acceptanceId: 'visible', result: 'pass', evidence: ['https://example.test/observation/1'] }], checks: [{ id: 'reply-tests', revision: 'a', result: 'pass', evidenceRef: 'https://example.test/run/1' }], deviations: [], residualRisks: [], newProductQuestions: [] })
+const evidence = (): ClosureSubmission => ({ definitionDigest: fixture().handoffs[0]!.contractDigest, implementationRefs: [{ kind: 'commit', uri: 'https://example.test/commit/a', revision: 'a' }], deliveredBehavior: ['Reply appears'], acceptanceEvidence: [{ acceptanceId: 'visible', result: 'pass', evidence: ['https://example.test/observation/1'] }], checks: [{ id: 'reply-tests', revision: 'a', result: 'pass', evidenceRef: 'https://example.test/run/1' }], deviations: [], residualRisks: [], newProductQuestions: [] })
 const proposal = (revision: number): ProposalSubmission => ({ kind: 'proposal', expectedRevision: revision, summary: 'Rename replies', operations: [{ type: 'update_module', moduleId: 'replies', patch: { title: 'Replies' } }] })
 
 describe('strict untrusted protocol', () => {
@@ -37,9 +37,9 @@ describe('strict untrusted protocol', () => {
   })
   it('rejects missing closure baselines, stale versions and mismatched declared identities atomically', () => {
     const s = fixture(), before = structuredClone(s)
-    const raw = evidence(); Reflect.deleteProperty(raw, 'handoffRevision')
-    expect(() => submitClosure(s, 'implementation', raw)).toThrow('handoffRevision')
-    expect(() => submitClosure(s, 'implementation', { ...evidence(), handoffRevision: 2 })).toThrow('baseline conflict')
+    const raw = evidence(); Reflect.deleteProperty(raw, 'definitionDigest')
+    expect(() => submitClosure(s, 'implementation', raw)).toThrow('definitionDigest')
+    expect(() => submitClosure(s, 'implementation', { ...evidence(), definitionDigest: 'b'.repeat(64) })).toThrow('baseline conflict')
     expect(() => submitClosureEnvelope(s, { kind: 'closure', handoffId: s.handoffs[0]!.id, agent: 'Quinn', submission: evidence() })).toThrow('declared agent')
     expect(s).toEqual(before)
   })
@@ -69,9 +69,6 @@ describe('frozen contracts and cross-record invariants', () => {
   it('accepts complete evidence in both directions and validates against frozen acceptance', () => {
     for (const [agent, verifier] of [['Steven', 'Quinn'], ['Quinn', 'Steven']] as const) {
       const s = fixture(); s.realizations[0]!.agent = agent
-      // The frozen contract remains authoritative even if a current draft differs.
-      s.modules[0]!.definitionStatus = 'shaping'
-      s.modules[0]!.contract = { ...contract, acceptance: [{ id: 'draft', text: 'Different future outcome' }] }
       const submitted = submitClosure(s, 'implementation', evidence(), { id: 'closure' })
       expect(acceptClosure(submitted, 'closure', verifier).closures[0]!.status).toBe('accepted')
     }
@@ -79,9 +76,9 @@ describe('frozen contracts and cross-record invariants', () => {
   it('rejects canonical real-but-wrong links and incomplete old records', () => {
     for (const mutate of [
       (s: ReturnType<typeof fixture>) => { s.realizations[0]!.moduleId = 'avatars' },
-      (s: ReturnType<typeof fixture>) => { s.realizations[0]!.handoffRevision = 2 },
-      (s: ReturnType<typeof fixture>) => { s.handoffs[1]!.revision = s.handoffs[0]!.revision; s.handoffs[1]!.moduleId = 'replies' },
-      (s: ReturnType<typeof fixture>) => { Reflect.deleteProperty(s.handoffs[0]!, 'frozenDefinition') },
+      (s: ReturnType<typeof fixture>) => { s.realizations[0]!.definitionDigest = 'b'.repeat(64) },
+      (s: ReturnType<typeof fixture>) => { s.handoffs[1]!.moduleId = 'replies' },
+      (s: ReturnType<typeof fixture>) => { Reflect.deleteProperty(s.handoffs[0]!, 'contractDigest') },
       (s: ReturnType<typeof fixture>) => { Reflect.deleteProperty(s.modules[0]!.contract, 'requiredChecks') },
     ]) {
       const s = fixture(); mutate(s)
@@ -95,7 +92,7 @@ describe('frozen contracts and cross-record invariants', () => {
   })
   it('allows an explicitly justified empty check set but blocks an incomplete freeze', () => {
     let s = createModule(createProduct({ title: 'Manual', idea: 'Review prose' }), { id: 'prose', title: 'Prose', contract: { ...contract, requiredChecks: [], checkRationale: '' } })
-    expect(() => freezeModule(s, 'prose')).toThrow('checkRationale')
+    expect(() => freezeModule(s, 'prose')).toThrow('required check policy')
     s = updateModule(s, 'prose', { contract: { ...contract, requiredChecks: [], checkRationale: 'This is a prose-only contract; manual observation supplies acceptance evidence.' } })
     expect(validateSnapshot(freezeModule(s, 'prose'))).toEqual([])
   })

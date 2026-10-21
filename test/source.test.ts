@@ -70,14 +70,12 @@ describe('TypeScript ontology authority', () => {
       await cp(join(root, 'suo'), join(clone, 'suo'), { recursive: true })
       const loaded = await loadSnapshot(clone)
       await generateArtifacts(loaded, clone)
-      const view = (module: string, revision: number) => readFile(join(clone, `docs/suo/HANDOFFS/handoff_module_${module}_${revision}.md`), 'utf8')
-      expect(await view('foundation', 1)).toContain(contract.objective)
-      expect(await view('foundation', 1)).not.toContain('Changed')
-      expect(await view('foundation', 1)).toContain('Status: stale')
-      expect(await view('foundation', 1)).toContain(oldDigest)
-      expect(await view('foundation', 2)).toContain('Changed objective')
-      expect(await view('feature', 1)).toContain(contract.objective)
-      expect(await view('feature', 2)).not.toContain('Changed objective')
+      const view = (module: string) => readFile(join(clone, `docs/suo/HANDOFFS/handoff_module_${module}.md`), 'utf8')
+      expect(loaded.handoffs).toHaveLength(2)
+      expect(await view('foundation')).toContain('Changed objective')
+      expect(await view('foundation')).not.toContain(oldDigest)
+      expect(await view('feature')).toContain(contract.objective)
+
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(clone, { recursive: true, force: true })
@@ -88,8 +86,8 @@ describe('TypeScript ontology authority', () => {
     const { root, snapshot } = await populatedProject()
     try {
       const legacy = freezeModule(snapshot, 'module:foundation')
-      Reflect.deleteProperty(legacy.handoffs[0]!, 'frozenDefinition')
-      await expect(saveAuthority(legacy, root)).rejects.toThrow('frozenDefinition')
+      Reflect.deleteProperty(legacy.handoffs[0]!, 'contractDigest')
+      await expect(saveAuthority(legacy, root)).rejects.toThrow('contractDigest')
       expect((await loadSnapshot(root)).handoffs).toEqual([])
     } finally { await rm(root, { recursive: true, force: true }) }
   }, 30_000)
@@ -257,9 +255,9 @@ describe('TypeScript ontology authority', () => {
     expect(changed.handoffs.find(value => value.moduleId === 'module:feature')?.status).toBe('stale')
     await saveAuthority(changed, root)
     await generateArtifacts(await loadSnapshot(root), root)
-    const output = await readFile(join(root, 'docs/suo/HANDOFFS/handoff_module_feature_1.md'), 'utf8')
-    expect(output).toContain('First objective.')
-    expect(output).not.toContain('Changed objective.')
+    const output = await readFile(join(root, 'docs/suo/HANDOFFS/handoff_module_feature.md'), 'utf8')
+    expect(output).not.toContain('First objective.')
+    expect(output).toContain('Changed objective.')
   })
 
   it('does not change authority when transient staging fails', async () => {

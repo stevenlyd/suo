@@ -1,3 +1,4 @@
+import { inheritObservation, canonicalJson } from './concurrency.js'
 import { assertSubmission, assertClosureSubmission, assertOperation, assertDecisionProposal } from './protocol.js'
 import { assertValidSnapshot } from './validation.js'
 import { createHash, randomUUID } from 'node:crypto'
@@ -24,7 +25,7 @@ export interface MutationOptions { now?: string; id?: string }
 
 const now = (value?: string) => value ?? new Date().toISOString()
 const id = (prefix: string, value?: string) => value ?? `${prefix}:${randomUUID()}`
-const copy = (snapshot: SuoSnapshot): SuoSnapshot => { assertValidSnapshot(snapshot); return structuredClone(snapshot) }
+const copy = (snapshot: SuoSnapshot): SuoSnapshot => { assertValidSnapshot(snapshot); return inheritObservation(snapshot, structuredClone(snapshot)) }
 const commit = (snapshot: SuoSnapshot, timestamp: string): SuoSnapshot => {
   snapshot.revision += 1
   snapshot.product.updatedAt = timestamp
@@ -36,7 +37,7 @@ export function createProduct(input: { id?: string; title: string; idea: string;
   const timestamp = now(options.now)
   if (!input.title.trim() || !input.idea.trim()) throw new Error('title and idea are required')
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     revision: 0,
     product: {
       id: id('product', input.id),
@@ -51,7 +52,7 @@ export function createProduct(input: { id?: string; title: string; idea: string;
   }
 }
 
-const emptyContract = (): ModuleContract => ({ objective: '', frozenBehavior: [], scope: [], nonGoals: [], acceptance: [], requiredChecks: [], checkRationale: '' })
+const emptyContract = (): ModuleContract => ({ objective: '', frozenBehavior: [], scope: [], nonGoals: [], acceptance: [], requiredChecks: null, checkRationale: null })
 
 export function createModule(snapshot: SuoSnapshot, input: { id: string; title: string; phase?: string; contract?: ModuleContract }, options: MutationOptions = {}): SuoSnapshot {
   assertOperation({ type: 'create_module', module: input })
@@ -141,7 +142,8 @@ export function proposeDecision(snapshot: SuoSnapshot, input: Omit<Decision, 'st
   const next = copy(snapshot)
   next.decisions.push({ ...structuredClone(input), status: input.status ?? 'proposed', createdAt: timestamp, updatedAt: timestamp })
   const module = requireModule(next, input.moduleId)
-  if (module.definitionStatus === 'candidate') module.definitionStatus = 'shaping'
+  if (['candidate', 'frozen'].includes(module.definitionStatus)) module.definitionStatus = 'shaping'
+  invalidateModuleAndDownstream(next, input.moduleId)
   return commit(next, timestamp)
 }
 
@@ -149,7 +151,6 @@ export function updateDecisionProposal(snapshot: SuoSnapshot, decisionId: string
   assertOperation({ type: 'update_decision', decisionId, patch })
   const next = copy(snapshot)
   const decision = requireDecision(next, decisionId)
-  if (!['open', 'proposed'].includes(decision.status)) throw new Error('only an open proposal can be updated')
   if (patch.prerequisites) for (const prerequisite of patch.prerequisites) requireDecision(next, prerequisite)
   if (patch.question !== undefined) decision.question = patch.question.trim()
   if (patch.alternatives !== undefined) decision.alternatives = structuredClone(patch.alternatives)
@@ -159,15 +160,17 @@ export function updateDecisionProposal(snapshot: SuoSnapshot, decisionId: string
   if (hasCycle(decisionGraph(next))) throw new Error('decision prerequisites would create a cycle')
   const timestamp = now(options.now)
   decision.updatedAt = timestamp
+  invalidateModuleAndDownstream(next, decision.moduleId)
   return commit(next, timestamp)
 }
 
 export function deleteDraftDecision(snapshot: SuoSnapshot, decisionId: string, options: MutationOptions = {}): SuoSnapshot {
   const decision = requireDecision(snapshot, decisionId)
-  if (!['open', 'proposed'].includes(decision.status)) throw new Error('only an open proposal can be deleted')
   if (snapshot.decisions.some(value => value.prerequisites.includes(decisionId))) throw new Error('cannot delete a referenced decision')
   const next = copy(snapshot)
   next.decisions = next.decisions.filter(value => value.id !== decisionId)
+  for (const handoff of next.handoffs) handoff.decisionIds = handoff.decisionIds.filter(value => value !== decisionId)
+  invalidateModuleAndDownstream(next, decision.moduleId)
   return commit(next, now(options.now))
 }
 
@@ -208,24 +211,10 @@ export function reopenDecision(snapshot: SuoSnapshot, decisionId: string, option
   const decision = requireDecision(next, decisionId)
   if (!['approved', 'deferred'].includes(decision.status)) throw new Error(`cannot reopen ${decision.status} decision`)
   const timestamp = now(options.now)
-  const successorId = id('decision', options.id)
-  if (next.decisions.some(value => value.id === successorId)) throw new Error(`decision already exists: ${successorId}`)
-  decision.status = 'superseded'
+  decision.status = 'proposed'
+  delete decision.ownerChoice
+  delete decision.rationale
   decision.updatedAt = timestamp
-  next.decisions.push({
-    id: successorId,
-    moduleId: decision.moduleId,
-    question: decision.question,
-    status: 'proposed',
-    alternatives: structuredClone(decision.alternatives),
-    ...(decision.recommendation ? { recommendation: decision.recommendation } : {}),
-    prerequisites: [...decision.prerequisites],
-    evidenceRefs: [...decision.evidenceRefs],
-    supersedes: decision.id,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  })
-  for (const dependent of next.decisions) dependent.prerequisites = dependent.prerequisites.map(value => value === decisionId ? successorId : value)
   const module = requireModule(next, decision.moduleId)
   if (module.definitionStatus === 'frozen') module.definitionStatus = 'shaping'
   invalidateModuleAndDownstream(next, decision.moduleId)
@@ -246,6 +235,7 @@ export function freezeModule(snapshot: SuoSnapshot, moduleId: string, options: M
   module.definitionStatus = 'frozen'
   module.updatedAt = timestamp
   invalidateModuleAndDownstream(next, moduleId)
+  module.definitionStatus = 'frozen'
   createCurrentHandoff(next, module, timestamp)
   return commit(next, timestamp)
 }
@@ -259,7 +249,7 @@ export function startRealization(snapshot: SuoSnapshot, handoffId: string, input
   if (!agent) throw new Error('realization agent identity is required')
   const timestamp = now(options.now)
   const realization: Realization = {
-    id: id('realization', input.id), moduleId: handoff.moduleId, handoffId: handoff.id, handoffRevision: handoff.revision,
+    id: id('realization', input.id), moduleId: handoff.moduleId, handoffId: handoff.id, definitionDigest: handoff.contractDigest,
     status: 'in_progress', implementationRefs: [], startedAt: timestamp, updatedAt: timestamp,
     agent,
   }
@@ -274,15 +264,15 @@ export function submitClosure(snapshot: SuoSnapshot, realizationId: string, subm
   const realization = requireRealization(next, realizationId)
   if (!['in_progress', 'reopened'].includes(realization.status)) throw new Error(`cannot submit closure for ${realization.status} realization`)
   const handoff = requireHandoff(next, realization.handoffId)
-  if (!['in_delivery', 'current'].includes(handoff.status) || handoff.revision !== realization.handoffRevision) throw new Error('realization targets a stale handoff')
-  if (submission.handoffRevision !== handoff.revision) throw new Error('closure baseline conflict: observed handoff revision differs')
-  const issues = closureCoverage(submission, handoff)
+  if (!['in_delivery', 'current'].includes(handoff.status) || handoff.contractDigest !== realization.definitionDigest) throw new Error('realization targets a stale handoff')
+  if (submission.definitionDigest !== handoff.contractDigest) throw new Error('closure baseline conflict: observed definition digest differs')
+  const issues = closureCoverage(submission, requireModule(next, handoff.moduleId).contract)
   if (issues.length) throw new Error(issues.join('; '))
   if (!submission.implementationRefs.length) throw new Error('closure requires at least one implementation reference')
   const timestamp = now(options.now)
   const closure: Closure = {
     ...structuredClone(submission), id: id('closure', options.id), realizationId, handoffId: handoff.id,
-    handoffRevision: handoff.revision, status: 'submitted', submittedAt: timestamp,
+    definitionDigest: handoff.contractDigest, status: 'submitted', submittedAt: timestamp,
   }
   next.closures.push(closure)
   realization.status = 'closure_submitted'
@@ -301,8 +291,8 @@ export function acceptClosure(snapshot: SuoSnapshot, closureId: string, verifier
   if (!verifierIdentity) throw new Error('closure verifier is required')
   if (realization.agent === verifierIdentity) throw new Error('an implementation agent cannot accept its own closure')
   const handoff = requireHandoff(next, closure.handoffId)
-  if (handoff.revision !== closure.handoffRevision || handoff.status !== 'in_delivery') throw new Error('closure targets a stale handoff')
-  const issues = closureCoverage(closure, handoff, true)
+  if (handoff.contractDigest !== closure.definitionDigest || handoff.status !== 'in_delivery') throw new Error('closure targets a stale handoff')
+  const issues = closureCoverage(closure, requireModule(next, handoff.moduleId).contract, true)
   if (issues.length) throw new Error(issues.join('; '))
   if (closure.deviations.some(value => value.requiresProductDecision) || closure.newProductQuestions.length) throw new Error('closure requires Product reconciliation')
   const timestamp = now(options.now)
@@ -341,6 +331,7 @@ export function reopenClosure(snapshot: SuoSnapshot, realizationId: string, reas
   if (realization.status !== 'closed') throw new Error('only a closed realization can be reopened')
   const timestamp = now(options.now)
   realization.status = 'reopened'
+  for (const closure of next.closures.filter(value => value.realizationId === realization.id)) closure.status = 'stale'
   realization.updatedAt = timestamp
   const handoff = requireHandoff(next, realization.handoffId)
   handoff.status = 'in_delivery'
@@ -387,20 +378,13 @@ export function approveProposal(snapshot: SuoSnapshot, proposalId: string, optio
   }
   const timestamp = now(options.now)
   let next = copy(snapshot)
-  const existingHandoffs = new Set(snapshot.handoffs.map(value => value.id))
-  const approval = { proposalId, revision: snapshot.revision + 1 }
   const pending = requireProposal(next, proposalId)
   pending.status = 'approved'
   pending.decidedAt = timestamp
   for (const operation of proposal.operations) {
     assertOperation(operation)
-    if (operation.type === 'correct_handoff_product_revision' && !existingHandoffs.has(operation.handoffId)) throw new Error('revision corrections require a previously committed handoff')
-    next = applyProductOperation(next, operation, timestamp, approval)
+    next = applyProductOperation(next, operation, timestamp)
   }
-  // Operations use standalone mutation counters internally. A proposal is one
-  // atomic commit, so its newly frozen handoffs must reference that commit.
-  // Never reinterpret previously committed/imported provenance on approval.
-  for (const handoff of next.handoffs) if (!existingHandoffs.has(handoff.id)) handoff.productRevision = approval.revision
   const approved = requireProposal(next, proposalId)
   approved.status = 'approved'
   approved.decidedAt = timestamp
@@ -464,7 +448,7 @@ export function nextAction(snapshot: SuoSnapshot): NextProductAction {
     return { type: 'review_closure', moduleId: realization.moduleId, closureId: submitted.id, title: `Review closure for ${requireModule(snapshot, realization.moduleId).title}`, whyNow: 'An external agent has submitted implementation evidence.', expectedOutcome: 'Accept the closure, reject it with a concrete reason, or reopen Product definition.' }
   }
   const activeRealization = snapshot.realizations.find(value => ['in_progress', 'closure_submitted', 'reopened'].includes(value.status))
-  if (activeRealization) return { type: 'await_delivery', moduleId: activeRealization.moduleId, realizationId: activeRealization.id, title: `Await closure for ${requireModule(snapshot, activeRealization.moduleId).title}`, whyNow: 'The current handoff is being realized externally.', expectedOutcome: 'Receive a closure submission tied to the exact handoff revision.' }
+  if (activeRealization) return { type: 'await_delivery', moduleId: activeRealization.moduleId, realizationId: activeRealization.id, title: `Await closure for ${requireModule(snapshot, activeRealization.moduleId).title}`, whyNow: 'The current handoff is being realized externally.', expectedOutcome: 'Receive a closure submission tied to the current definition digest.' }
 
   const frozen = new Set(snapshot.modules.filter(value => value.definitionStatus === 'frozen').map(value => value.id))
   const eligible = snapshot.modules
@@ -486,7 +470,7 @@ export function nextAction(snapshot: SuoSnapshot): NextProductAction {
   }
 
   const currentHandoff = snapshot.handoffs.find(value => value.status === 'current')
-  if (currentHandoff) return { type: 'start_delivery', moduleId: currentHandoff.moduleId, handoffId: currentHandoff.id, title: `Hand off ${requireModule(snapshot, currentHandoff.moduleId).title}`, whyNow: 'Its Product contract is frozen and the handoff is current.', expectedOutcome: 'An external agent starts realization against this exact handoff revision.' }
+  if (currentHandoff) return { type: 'start_delivery', moduleId: currentHandoff.moduleId, handoffId: currentHandoff.id, title: `Hand off ${requireModule(snapshot, currentHandoff.moduleId).title}`, whyNow: 'Its Product contract is frozen and the handoff is current.', expectedOutcome: 'An external agent starts realization against this current definition digest.' }
   if (!snapshot.modules.length) return { type: 'clarify_idea', title: 'Identify the first product capability', whyNow: 'The idea exists but has not yet been decomposed into bounded product modules.', expectedOutcome: 'Create the smallest capability that can produce a user-observable outcome.' }
   return { type: 'definition_complete', title: 'Current product slice is complete', whyNow: 'No unresolved or deliverable module remains in the active graph.', expectedOutcome: 'Import new evidence, reopen a decision, or define the next product slice.' }
 }
@@ -498,68 +482,49 @@ export function validateInvariants(snapshot: SuoSnapshot): string[] {
     for (const value of values) seen.has(value.id) ? issues.push(`duplicate ${label} id: ${value.id}`) : seen.add(value.id)
   }
   if (issues.length) return issues // Duplicate graph nodes must not throw during diagnostics.
-  for (const handoff of snapshot.handoffs) {
-    const corrections = handoff.productRevisionCorrections ?? []
-    if (corrections.some((value, index) =>
-      value.from === value.to || value.to >= value.revision ||
-      value.revision > snapshot.revision ||
-      !snapshot.proposals.some(proposal => proposal.id === value.proposalId && proposal.status === 'approved' && proposal.decidedAt === value.correctedAt) ||
-      !value.reason.trim() || value.evidenceRefs.some(ref => !ref.trim()) ||
-      (index > 0 && (value.from !== corrections[index - 1]!.to || value.revision < corrections[index - 1]!.revision))) ||
-      (corrections.length && corrections.at(-1)!.to !== handoff.productRevision)) {
-      issues.push(`invalid Product revision correction chain: ${handoff.id}`)
-    }
-    const frozen = handoff.frozenDefinition
-    if (!frozen) { issues.push(`missing frozen definition: ${handoff.id}; needs explicit completion`); continue }
-    if (frozen.module.id !== handoff.moduleId ||
-        JSON.stringify(frozen.decisions.map(value => value.id).sort()) !== JSON.stringify([...handoff.decisionIds].sort()) ||
-        frozen.decisions.some(value => value.moduleId !== handoff.moduleId || !['approved', 'deferred'].includes(value.status)) ||
-        handoffDefinitionDigest({ ...snapshot, decisions: frozen.decisions }, frozen.module) !== handoff.contractDigest) {
-      issues.push(`frozen definition does not match handoff: ${handoff.id}`)
-    }
-    const objective = frozen.module.contract.objective
-    if (typeof objective !== 'string' && createHash('sha256').update(objective.content).digest('hex') !== objective.digest) {
-      issues.push(`frozen Markdown digest mismatch: ${handoff.id}`)
-    }
-  }
   const unique = (ids: string[], label: string) => { if (new Set(ids).size !== ids.length) issues.push(`duplicate ${label}`) }
   for (const module of snapshot.modules) {
     unique(module.contract.acceptance.map(value => value.id), `acceptance id: ${module.id}`)
-    unique(module.contract.requiredChecks.map(value => value.id), `required check id: ${module.id}`)
+    unique((module.contract.requiredChecks ?? []).map(value => value.id), `required check id: ${module.id}`)
     unique(module.dependencies, `dependency: ${module.id}`)
     if (module.definitionStatus === 'frozen' && contractGaps(module.contract).length) issues.push(`incomplete frozen contract: ${module.id}`)
   }
-  unique(snapshot.handoffs.map(value => `${value.moduleId}/${value.revision}`), 'handoff revision')
+  unique(snapshot.handoffs.map(value => value.moduleId), 'current handoff module')
   for (const handoff of snapshot.handoffs) {
     if (!snapshot.modules.some(value => value.id === handoff.moduleId)) issues.push(`unknown handoff module: ${handoff.id}`)
-    if (handoff.productRevision > snapshot.revision) issues.push(`future handoff Product revision: ${handoff.id}`)
     unique(handoff.decisionIds, `handoff decision: ${handoff.id}`)
-    for (const decisionId of handoff.decisionIds) if (!snapshot.decisions.some(value => value.id === decisionId && value.moduleId === handoff.moduleId)) issues.push(`handoff decision belongs to another module or is unknown: ${handoff.id}/${decisionId}`)
-    const frozen = handoff.frozenDefinition
-    if (frozen) {
-      unique(frozen.module.contract.acceptance.map(value => value.id), `frozen acceptance: ${handoff.id}`)
-      unique(frozen.module.contract.requiredChecks.map(value => value.id), `frozen required check: ${handoff.id}`)
-      if (frozen.module.definitionStatus !== 'frozen' || contractGaps(frozen.module.contract).length) issues.push(`incomplete frozen definition: ${handoff.id}`)
+    if (handoff.status !== 'stale') {
+      const module = snapshot.modules.find(value => value.id === handoff.moduleId)
+      const governing = snapshot.decisions.filter(value => value.moduleId === handoff.moduleId && ['approved','deferred'].includes(value.status)).map(value => value.id).sort()
+      if (!module || module.definitionStatus !== 'frozen' || module.dependencies.some(id => snapshot.modules.find(value => value.id === id)?.definitionStatus !== 'frozen') || snapshot.decisions.some(value => value.moduleId === handoff.moduleId && ['open','proposed'].includes(value.status)) || canonicalJson([...handoff.decisionIds].sort()) !== canonicalJson(governing)) issues.push(`handoff is not definition-ready: ${handoff.id}`)
     }
+    for (const decisionId of handoff.decisionIds) if (!snapshot.decisions.some(value => value.id === decisionId && value.moduleId === handoff.moduleId)) issues.push(`handoff decision belongs to another module or is unknown: ${handoff.id}/${decisionId}`)
+    if (snapshot.modules.some(value => value.id === handoff.moduleId) && handoff.status !== 'stale' && handoff.contractDigest !== handoffDefinitionDigest(snapshot, requireModule(snapshot, handoff.moduleId))) issues.push(`handoff definition is not current: ${handoff.id}`)
   }
+
   for (const realization of snapshot.realizations) {
+    if (realization.status !== 'stale' && (!snapshot.handoffs.some(value => value.id === realization.handoffId && value.status !== 'stale' && value.contractDigest === realization.definitionDigest))) issues.push(`realization definition is stale: ${realization.id}`)
     if (realization.agent !== realization.agent.trim()) issues.push(`noncanonical realization agent: ${realization.id}`)
     const handoff = snapshot.handoffs.find(value => value.id === realization.handoffId)
-    if (!handoff || realization.moduleId !== handoff.moduleId || realization.handoffRevision !== handoff.revision) issues.push(`realization does not match handoff: ${realization.id}`)
+    if (!handoff || realization.moduleId !== handoff.moduleId) issues.push(`realization does not match handoff: ${realization.id}`)
     const closure = snapshot.closures.find(value => value.id === realization.closureId)
     if (realization.closureId && (!closure || closure.realizationId !== realization.id)) issues.push(`realization closure mismatch: ${realization.id}`)
     if (realization.status === 'closed' && closure?.status !== 'accepted') issues.push(`closed realization lacks accepted closure: ${realization.id}`)
     if (realization.status === 'closure_submitted' && closure?.status !== 'submitted') issues.push(`realization lacks submitted closure: ${realization.id}`)
   }
   for (const closure of snapshot.closures) {
+    issues.push(...evidenceIssues(closure))
     if (closure.verifier !== undefined && closure.verifier !== closure.verifier.trim()) issues.push(`noncanonical closure verifier: ${closure.id}`)
     const realization = snapshot.realizations.find(value => value.id === closure.realizationId)
     const handoff = snapshot.handoffs.find(value => value.id === closure.handoffId)
-    if (!realization || !handoff || realization.handoffId !== closure.handoffId || closure.handoffRevision !== handoff.revision) issues.push(`closure does not match realization handoff: ${closure.id}`)
-    if (handoff) issues.push(...closureCoverage(closure, handoff, closure.status === 'accepted'))
+    if (!realization || !handoff || realization.handoffId !== closure.handoffId) issues.push(`closure does not match realization handoff: ${closure.id}`)
+    if (handoff && closure.status !== 'stale') {
+      if (closure.definitionDigest !== handoff.contractDigest || handoff.status === 'stale') issues.push(`closure definition is stale: ${closure.id}`)
+      issues.push(...closureCoverage(closure, requireModule(snapshot, handoff.moduleId).contract, closure.status === 'accepted'))
+    }
     if (closure.status === 'accepted' && (closure.deviations.some(value => value.requiresProductDecision) || closure.newProductQuestions.length)) issues.push(`accepted closure needs Product reconciliation: ${closure.id}`)
     if (closure.status === 'submitted' && (realization?.closureId !== closure.id || realization.status !== 'closure_submitted')) issues.push(`submitted closure is not active: ${closure.id}`)
-    if (closure.status !== 'submitted' && (!closure.verifier?.trim() || !closure.decidedAt || closure.verifier === realization?.agent)) issues.push(`invalid closure verification identity/state: ${closure.id}`)
+    if (['accepted', 'rejected'].includes(closure.status) && (!closure.verifier?.trim() || !closure.decidedAt || closure.verifier === realization?.agent)) issues.push(`invalid closure verification identity/state: ${closure.id}`)
   }
   for (const handoff of snapshot.handoffs) if (handoff.status === 'closed' && !snapshot.realizations.some(value => value.handoffId === handoff.id && value.status === 'closed' && snapshot.closures.some(closure => closure.id === value.closureId && closure.status === 'accepted'))) issues.push(`closed handoff lacks accepted realization: ${handoff.id}`)
   for (const proposal of snapshot.proposals) {
@@ -610,10 +575,10 @@ export function proseText(value: Prose): string {
 }
 
 export function reconcileImportedAuthority(snapshot: SuoSnapshot): SuoSnapshot {
-  const next = copy(snapshot)
+  const next = structuredClone(snapshot)
   const changedModules = new Set(next.handoffs
-    .filter(value => ['current', 'in_delivery'].includes(value.status))
-    .filter(value => value.contractDigest !== handoffDefinitionDigest(next, requireModule(next, value.moduleId)))
+    .filter(value => value.status !== 'stale')
+    .filter(value => { const module = requireModule(next, value.moduleId); return module.definitionStatus !== 'frozen' || module.dependencies.some(id => next.modules.find(dependency => dependency.id === id)?.definitionStatus !== 'frozen') || value.contractDigest !== handoffDefinitionDigest(next, module) })
     .map(value => value.moduleId))
   for (const moduleId of changedModules) {
     invalidateModuleAndDownstream(next, moduleId)
@@ -634,41 +599,57 @@ function contractGaps(contract: ModuleContract): string[] {
   if (!contract.scope.length) gaps.push('scope')
   if (!contract.nonGoals.length) gaps.push('nonGoals')
   if (!contract.acceptance.length) gaps.push('acceptance')
-  if (!contract.checkRationale.trim()) gaps.push('checkRationale')
+  if (contract.requiredChecks === null || !contract.checkRationale?.trim()) gaps.push('required check policy')
   return gaps
 }
 
 function createCurrentHandoff(snapshot: SuoSnapshot, module: ProductModule, timestamp: string): Handoff {
-  for (const value of snapshot.handoffs.filter(value => value.moduleId === module.id && ['current', 'in_delivery'].includes(value.status))) value.status = 'stale'
-  const revision = Math.max(0, ...snapshot.handoffs.filter(value => value.moduleId === module.id).map(value => value.revision)) + 1
   const handoff: Handoff = {
-    id: `handoff:${module.id}:${revision}`, moduleId: module.id, revision, productRevision: snapshot.revision + 1, status: 'current',
+    id: `handoff:${module.id}`, moduleId: module.id, status: 'current',
     decisionIds: snapshot.decisions.filter(value => value.moduleId === module.id && ['approved', 'deferred'].includes(value.status)).map(value => value.id).sort(),
     contractDigest: handoffDefinitionDigest(snapshot, module), createdAt: timestamp,
-    frozenDefinition: structuredClone({ module, decisions: snapshot.decisions.filter(value => value.moduleId === module.id && ['approved', 'deferred'].includes(value.status)) }),
   }
+  snapshot.handoffs = snapshot.handoffs.filter(value => value.moduleId !== module.id)
   snapshot.handoffs.push(handoff)
   return handoff
 }
 
 function invalidateModuleAndDownstream(snapshot: SuoSnapshot, moduleId: string): void {
   for (const affected of [moduleId, ...downstream(snapshot, moduleId)]) {
-    for (const handoff of snapshot.handoffs.filter(value => value.moduleId === affected && value.status !== 'closed')) handoff.status = 'stale'
+    for (const handoff of snapshot.handoffs.filter(value => value.moduleId === affected)) handoff.status = 'stale'
+    for (const realization of snapshot.realizations.filter(value => value.moduleId === affected)) realization.status = 'stale'
+    for (const closure of snapshot.closures.filter(value => snapshot.realizations.some(realization => realization.id === value.realizationId && realization.moduleId === affected))) closure.status = 'stale'
     const module = requireModule(snapshot, affected)
-    if (affected !== moduleId && module.definitionStatus === 'frozen') module.definitionStatus = 'shaping'
+    if (module.definitionStatus === 'frozen') module.definitionStatus = 'shaping'
   }
 }
 
 export function handoffDefinitionDigest(snapshot: SuoSnapshot, module: ProductModule): string {
-  const decisions = snapshot.decisions
-    .filter(value => value.moduleId === module.id && ['approved', 'deferred'].includes(value.status))
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .map(value => ({ id: value.id, status: value.status, ownerChoice: value.ownerChoice, rationale: value.rationale, evidenceRefs: [...value.evidenceRefs].sort() }))
-  return createHash('sha256').update(JSON.stringify({
-    dependencies: [...module.dependencies].sort(),
-    contract: { ...module.contract, objective: proseDigestValue(module.contract.objective) },
-    decisions,
-  })).digest('hex')
+  // Include transitive prerequisites so evidence cannot survive a dependency edit.
+  // Iteration is cycle-safe; the invariant checker rejects cycles independently.
+  const ids = new Set<string>(), queue = [module.id]
+  while (queue.length) {
+    const id = queue.shift()!
+    if (ids.has(id)) continue
+    ids.add(id)
+    queue.push(...(snapshot.modules.find(value => value.id === id)?.dependencies ?? []))
+    for (const decision of snapshot.decisions.filter(value => value.moduleId === id && value.status !== 'superseded')) {
+      for (const prerequisite of decision.prerequisites) {
+        const source = snapshot.decisions.find(value => value.id === prerequisite)
+        if (source) queue.push(source.moduleId)
+      }
+    }
+  }
+  const definitions = [...ids].sort().map(id => {
+    const value = snapshot.modules.find(item => item.id === id)
+    if (!value) return { id, missing: true }
+    return { id, dependencies: [...value.dependencies].sort(),
+      contract: { ...value.contract, objective: proseDigestValue(value.contract.objective) },
+      decisions: snapshot.decisions.filter(item => item.moduleId === id && item.status !== 'superseded')
+        .sort((a, b) => a.id.localeCompare(b.id)).map(({ createdAt, updatedAt, ...decision }) => ({ ...decision, prerequisites: [...decision.prerequisites].sort(), evidenceRefs: [...decision.evidenceRefs].sort() })),
+    }
+  })
+  return createHash('sha256').update(canonicalJson(definitions)).digest('hex')
 }
 
 function downstream(snapshot: SuoSnapshot, moduleId: string): string[] {
@@ -676,7 +657,7 @@ function downstream(snapshot: SuoSnapshot, moduleId: string): string[] {
   const queue = [moduleId]
   while (queue.length) {
     const current = queue.shift()!
-    for (const module of snapshot.modules.filter(value => value.dependencies.includes(current))) if (!result.has(module.id)) { result.add(module.id); queue.push(module.id) }
+    for (const module of snapshot.modules.filter(value => value.id !== moduleId && (value.dependencies.includes(current) || snapshot.decisions.some(decision => decision.moduleId === value.id && decision.prerequisites.some(id => snapshot.decisions.some(source => source.id === id && source.moduleId === current)))))) if (!result.has(module.id)) { result.add(module.id); queue.push(module.id) }
   }
   return [...result].sort()
 }
@@ -702,7 +683,7 @@ function proposalScopeDigest(snapshot: SuoSnapshot, operations: ProductOperation
     const dependency = snapshot.decisions.find(item => item.id === prerequisite)
     return !dependency || ids.has(value.moduleId) !== ids.has(dependency.moduleId)
   }))) return undefined
-  return createHash('sha256').update(JSON.stringify({
+  return createHash('sha256').update(canonicalJson({
     product: { ...snapshot.product, updatedAt: undefined },
     modules: snapshot.modules.filter(value => ids.has(value.id)),
     decisions: snapshot.decisions.filter(value => ids.has(value.moduleId)),
@@ -714,7 +695,7 @@ function proposalScopeDigest(snapshot: SuoSnapshot, operations: ProductOperation
 }
 
 function definitionDigest(snapshot: SuoSnapshot): string {
-  return createHash('sha256').update(JSON.stringify({
+  return createHash('sha256').update(canonicalJson({
     product: {
       id: snapshot.product.id,
       title: snapshot.product.title,
@@ -727,7 +708,7 @@ function definitionDigest(snapshot: SuoSnapshot): string {
   })).digest('hex')
 }
 
-function applyProductOperation(snapshot: SuoSnapshot, operation: ProductOperation, timestamp: string, approval: { proposalId: string; revision: number }): SuoSnapshot {
+function applyProductOperation(snapshot: SuoSnapshot, operation: ProductOperation, timestamp: string): SuoSnapshot {
   const options = { now: timestamp }
   switch (operation.type) {
     case 'create_module': return createModule(snapshot, operation.module, options)
@@ -773,20 +754,6 @@ function applyProductOperation(snapshot: SuoSnapshot, operation: ProductOperatio
       if (operation.expectedAssignee !== undefined && handoff) handoff.expectedAssignee = operation.expectedAssignee.trim()
       return next
     }
-    case 'correct_handoff_product_revision': {
-      const next = copy(snapshot)
-      const handoff = requireHandoff(next, operation.handoffId)
-      if (handoff.productRevision !== operation.expectedFrom) throw new Error('handoff revision correction is stale')
-      if (!Number.isSafeInteger(operation.to) || operation.to < 0 || operation.to >= approval.revision || operation.to === operation.expectedFrom) throw new Error('correction must identify a different, previously committed Product revision')
-      if (!operation.reason.trim() || !operation.evidenceRefs.length || operation.evidenceRefs.some(value => !value.trim())) throw new Error('revision correction requires a reason and evidence')
-      handoff.productRevisionCorrections = [...(handoff.productRevisionCorrections ?? []), {
-        from: operation.expectedFrom, to: operation.to, reason: operation.reason.trim(),
-        evidenceRefs: [...operation.evidenceRefs], proposalId: approval.proposalId,
-        revision: approval.revision, correctedAt: timestamp,
-      }]
-      handoff.productRevision = operation.to
-      return commit(next, timestamp)
-    }
     case 'reopen_closure': return reopenClosure(snapshot, operation.realizationId, operation.reason, {
       ...(operation.decisionId ? { id: operation.decisionId } : {}),
       now: timestamp,
@@ -805,19 +772,27 @@ function requireHandoff(snapshot: SuoSnapshot, handoffId: string): Handoff { con
 function requireRealization(snapshot: SuoSnapshot, realizationId: string): Realization { const value = snapshot.realizations.find(item => item.id === realizationId); if (!value) throw new Error(`unknown realization: ${realizationId}`); return value }
 function requireClosure(snapshot: SuoSnapshot, closureId: string): Closure { const value = snapshot.closures.find(item => item.id === closureId); if (!value) throw new Error(`unknown closure: ${closureId}`); return value }
 
-function closureCoverage(closure: ClosureSubmission, handoff: Handoff, requirePass = false): string[] {
-  const issues: string[] = []
-  const contract = handoff.frozenDefinition.module.contract
+function closureCoverage(closure: ClosureSubmission, contract: ModuleContract, requirePass = false): string[] {
+  const issues: string[] = evidenceIssues(closure)
+  if (contract.requiredChecks === null || !contract.checkRationale?.trim()) issues.push('required check policy is undecided')
   const exact = (actual: string[], expected: string[], label: string) => {
     if (new Set(actual).size !== actual.length || actual.length !== expected.length || actual.some(id => !expected.includes(id))) issues.push(`${label} must exactly cover frozen contract without duplicate or unknown IDs`)
   }
   exact(closure.acceptanceEvidence.map(value => value.acceptanceId), contract.acceptance.map(value => value.id), 'acceptance evidence')
-  exact(closure.checks.map(value => value.id), contract.requiredChecks.map(value => value.id), 'required checks')
+  exact(closure.checks.map(value => value.id), (contract.requiredChecks ?? []).map(value => value.id), 'required checks')
+  if (requirePass && (closure.acceptanceEvidence.some(value => value.result !== 'pass') || closure.checks.some(value => value.result !== 'pass'))) issues.push('acceptance evidence or required checks did not pass')
+  return issues
+}
+
+function evidenceIssues(closure: ClosureSubmission): string[] {
+  const issues: string[] = []
+  for (const [label, ids] of [['acceptance', closure.acceptanceEvidence.map(item => item.acceptanceId)], ['checks', closure.checks.map(item => item.id)]] as const) {
+    if (new Set(ids).size !== ids.length) issues.push(`duplicate ${label} evidence IDs`)
+  }
   for (const item of closure.acceptanceEvidence) if (item.result === 'pass' && (!item.evidence.length || item.evidence.some(value => !value.trim()))) issues.push(`empty acceptance evidence: ${item.acceptanceId}`)
   for (const check of closure.checks) {
     if (!closure.implementationRefs.some(value => value.revision === check.revision)) issues.push(`check revision is not an implementation revision: ${check.id}`)
     if (check.result === 'pass' && !check.evidenceRef?.trim()) issues.push(`empty check evidence: ${check.id}`)
   }
-  if (requirePass && (closure.acceptanceEvidence.some(value => value.result !== 'pass') || closure.checks.some(value => value.result !== 'pass'))) issues.push('acceptance evidence or required checks did not pass')
   return issues
 }

@@ -7,7 +7,7 @@ import { knowledgeStore } from '../src/knowledge-store.js'
 import { loadSnapshot, saveSnapshot } from '../src/store.js'
 import { findProjectRoot } from '../src/source.js'
 import { generateArtifacts } from '../src/render.js'
-import { adoptVaultNote, approveVaultDraft, compileVault, initVault, readVaultDraft, readVaultHistory, recoverVault } from '../src/vault.js'
+import { adoptVaultNote, approveVaultDraft, compileVault, initVault, readVaultDraft, readVaultCurrent, recoverVault } from '../src/vault.js'
 import { begin, end, hash } from '../src/vault-notes.js'
 import type { ProductOperation, SuoSnapshot } from '../src/model.js'
 
@@ -26,7 +26,7 @@ async function operations(root: string, ops: ProductOperation[], legacy = false)
   snapshot = stageProposal(snapshot, { expectedRevision: snapshot.revision, kind: 'proposal', id, summary: 'Reviewed test proposal', operations: ops })
   await saveSnapshot(snapshot, root)
   snapshot = approveProposal(await loadSnapshot(root), id)
-  if (legacy) for (const handoff of snapshot.handoffs) Reflect.deleteProperty(handoff, 'frozenDefinition')
+  if (legacy) for (const handoff of snapshot.handoffs) Reflect.deleteProperty(handoff, 'contractDigest')
   await saveSnapshot(snapshot, root)
   return loadSnapshot(root)
 }
@@ -67,7 +67,7 @@ describe('stateless knowledge-store adapters', () => {
     const draft = await readVaultDraft(root)
     await writeFile(join(root, 'Feature.md'), (await readFile(join(root, 'Feature.md'), 'utf8')) + '\nNew research.\n')
     await expect(approveVaultDraft(root, draft.token)).rejects.toThrow('stale')
-    expect((await readVaultHistory(root)).length).toBe(1)
+    expect(Object.keys(await readVaultCurrent(root)).length).toBe(3)
   })
 
   it('keeps identity on rename and rejects missing or duplicate identities', async () => {
@@ -130,25 +130,25 @@ describe('stateless knowledge-store adapters', () => {
     await writeFile(path, (await readFile(path, 'utf8')).replace('Original objective', 'New objective'))
     const draft = await readVaultDraft(root)
     expect(draft.snapshot.handoffs[0]!.status).toBe('stale')
-    expect((await readVaultHistory(root))[originalRevision]!.snapshot.handoffs[0]!.status).toBe('current')
+    expect((await readVaultCurrent(root)).snapshot.handoffs[0]!.status).toBe('current')
     await approveVaultDraft(root, draft.token)
     frozen = await loadSnapshot(root)
     await generateArtifacts(frozen, root)
     const output = await readFile(join(root, 'docs/suo/HANDOFFS', `${handoff.id.replaceAll(':', '_')}.md`), 'utf8')
-    expect(output).toContain('Original objective')
-    expect(output).not.toContain('New objective')
+    expect(output).not.toContain('Original objective')
+    expect(output).toContain('New objective')
     expect(output).toContain('Status: stale')
   })
 
   it('rejects incomplete historical authority without modifying Vault history', async () => {
     const root = await vault(), id = await note(root)
     await approveNotes(root)
-    const before = await readVaultHistory(root)
+    const before = await readVaultCurrent(root)
     await expect(operations(root, [
       { type: 'update_module', moduleId: id, patch: { contract } },
       { type: 'freeze_module', moduleId: id },
-    ], true)).rejects.toThrow('frozenDefinition')
-    expect(await readVaultHistory(root)).toEqual(before)
+    ], true)).rejects.toThrow('contractDigest')
+    expect(await readVaultCurrent(root)).toEqual(before)
   })
 
   it('supports decision notes but requires reopening approved decisions before editing', async () => {
@@ -160,7 +160,9 @@ describe('stateless knowledge-store adapters', () => {
     await operations(root, [{ type: 'approve_decision', decisionId: id, choice: 'A', rationale: 'Evidence' }])
     const path = join(root, 'Choice.md')
     await writeFile(path, (await readFile(path, 'utf8')).replace(`${begin}\nChoice`, `${begin}\nChanged question`))
-    await expect(readVaultDraft(root)).rejects.toThrow('reopened')
+    expect((await readVaultDraft(root)).changed).toBe(true)
+    await approveNotes(root)
+    expect((await loadSnapshot(root)).decisions[0]!.question).toContain('Changed question')
   })
 
   it('round-trips Agent-created approved decisions including optional recommendations', async () => {
@@ -187,12 +189,12 @@ describe('stateless knowledge-store adapters', () => {
 
   it('detects history edits and missing history instead of reconstructing approval', async () => {
     const root = await vault(); await note(root); await approveNotes(root)
-    const path = join(root, 'suo-history/0000000000.json')
+    const path = join(root, 'suo-state/current.json')
     const raw = await readFile(path, 'utf8')
     await writeFile(path, raw.replace('A notebook-owned product', 'Changed history'))
-    await expect(loadSnapshot(root)).rejects.toThrow('integrity')
+    await expect(loadSnapshot(root)).rejects.toThrow('digest')
     await writeFile(path, raw); await rm(path)
-    await expect(loadSnapshot(root)).rejects.toThrow('gap')
+    await expect(loadSnapshot(root)).rejects.toThrow('missing current')
   })
 
   it('detaches explicit draft deletions without deleting the personal note', async () => {
@@ -206,13 +208,13 @@ describe('stateless knowledge-store adapters', () => {
 
   it('fails closed on interrupted writes and recovers without overwriting outside edits', async () => {
     const root = await vault(); await note(root); await approveNotes(root)
-    const head = (await readVaultHistory(root)).at(-1)!
+    const head = await readVaultCurrent(root)
     const snapshot = structuredClone(head.snapshot); snapshot.revision++
-    const payload = { format: 1, previous: head.digest, snapshot }
+    const payload = { format: 2, snapshot }
     const record = { ...payload, digest: hash(JSON.stringify(payload)) }
     const before = await readFile(join(root, 'Feature.md'), 'utf8'), after = before + '\npartially written\n'
-    const journal = { format: 1, revision: snapshot.revision, record, writes: [{ path: 'Feature.md', before, after }] }
-    await writeFile(join(root, 'suo-history/transaction.json'), JSON.stringify(journal))
+    const journal = { format: 2, before: await readFile(join(root, 'suo-state/current.json'), 'utf8'), record, writes: [{ path: 'Feature.md', before, after }] }
+    await writeFile(join(root, 'suo-state/transaction.json'), JSON.stringify(journal))
     await writeFile(join(root, 'Feature.md'), 'External concurrent edit')
     await expect(loadSnapshot(root)).rejects.toThrow('interrupted')
     await expect(recoverVault(root)).rejects.toThrow('recovery conflict')

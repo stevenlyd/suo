@@ -1,3 +1,5 @@
+import { observe, observedIdentity, contentIdentity } from './concurrency.js';
+import { safePath } from './project-files.js';
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { findProjectRoot } from './source.js';
@@ -8,12 +10,13 @@ export const workspaceDir = (root) => join(root, '.suo');
 const stagedProposalPath = (root) => join(workspaceDir(root), 'staged', 'proposals.json');
 export async function loadSnapshot(start = process.cwd()) {
     const root = await findProjectRoot(start);
+    await withProjectLock(root, () => recoverPendingCommit(root));
     const authority = await (await knowledgeStore(root)).load();
     const authorityProposalIds = new Set(authority.proposals.map(value => value.id));
     const staged = (await loadStagedProposals(root)).filter(value => !authorityProposalIds.has(value.id));
     const snapshot = { ...authority, proposals: [...authority.proposals, ...staged] };
     assertValidSnapshot(snapshot);
-    return snapshot;
+    return observe(snapshot, authority);
 }
 export async function saveSnapshot(snapshot, start = process.cwd(), options = {}) {
     assertValidSnapshot(snapshot);
@@ -22,46 +25,77 @@ export async function saveSnapshot(snapshot, start = process.cwd(), options = {}
     const root = options.initialize ? resolve(start) : await findProjectRoot(start);
     const adapter = await knowledgeStore(root);
     await withProjectLock(root, async () => {
+        await recoverPendingCommit(root);
         const canonical = authorityProjection(snapshot);
-        const requestedPending = snapshot.proposals.filter(proposal => proposal.status === 'pending');
+        const consumed = new Set(snapshot.proposals.filter(value => value.status !== 'pending').map(value => value.id));
+        const requested = snapshot.proposals.filter(value => value.status === 'pending');
         const current = options.initialize ? undefined : await adapter.load();
-        const pending = options.initialize
-            ? requestedPending
-            : mergePending(await loadStagedProposals(root), requestedPending, new Set(canonical.proposals.map(value => value.id)));
-        assertValidSnapshot({ ...canonical, proposals: [...canonical.proposals, ...pending] });
+        if (current && observedIdentity(snapshot) !== contentIdentity(current))
+            throw new Error('stale authority content: reload before saving');
+        const pendingBefore = options.initialize ? [] : await loadStagedProposals(root);
+        const pending = options.initialize ? requested : mergePending(pendingBefore, requested, consumed);
+        assertValidSnapshot({ ...canonical, proposals: pending });
         const prepared = await prepareStagedWrite(root, pending);
         try {
-            if (options.initialize) {
+            if (!current) {
                 await adapter.save(canonical);
                 await prepared.commit();
-                return;
             }
-            if (!current)
-                throw new Error('current authority is unavailable');
-            if (snapshot.revision === current.revision) {
+            else if (snapshot.revision === current.revision) {
                 if (stable(canonical) !== stable(authorityProjection(current)))
                     throw new Error('authority changes require an explicit revision commit');
                 await prepared.commit();
-                return;
             }
-            if (snapshot.revision !== current.revision + 1)
-                throw new Error(`stale Suo revision: expected ${current.revision.toString()} -> ${(current.revision + 1).toString()}, received ${snapshot.revision.toString()}`);
-            await adapter.save(canonical);
-            try {
+            else {
+                if (snapshot.revision !== current.revision + 1)
+                    throw new Error('stale Suo revision: expected one concurrency-token increment');
+                // A recoverable transaction consumes staged approvals with the authority
+                // write. A decided-proposal ledger is neither persisted nor required.
+                const path = await safePath(root, '.suo/commit.json');
+                await writeFile(path, JSON.stringify({ before: contentIdentity(current), after: canonical, pending, pendingBefore }), { flag: 'wx' });
+                await adapter.save(canonical);
                 await prepared.commit();
+                await rm(path);
             }
-            catch (error) {
-                if (adapter.kind === 'repo-ts') {
-                    await adapter.save(current);
-                    throw error;
-                }
-                throw new Error(`Vault revision ${canonical.revision} committed, but local proposal staging failed; reload before retrying`, { cause: error });
-            }
+            observe(snapshot, await adapter.load());
         }
         finally {
             await prepared.cleanup();
         }
     });
+}
+async function recoverPendingCommit(root) {
+    const path = await safePath(root, '.suo/commit.json');
+    let raw;
+    try {
+        raw = await readFile(path, 'utf8');
+    }
+    catch (error) {
+        if (error.code === 'ENOENT')
+            return;
+        throw error;
+    }
+    const record = JSON.parse(raw);
+    assertValidSnapshot(record.after);
+    assertValidSnapshot({ ...record.after, proposals: record.pending });
+    const staged = await loadStagedProposals(root);
+    if (JSON.stringify(staged) !== JSON.stringify(record.pendingBefore) && JSON.stringify(staged) !== JSON.stringify(record.pending))
+        throw new Error('interrupted commit conflicts with staged proposals');
+    const adapter = await knowledgeStore(root);
+    const current = await adapter.load();
+    const identity = contentIdentity(current);
+    if (identity !== record.before && identity !== contentIdentity(record.after))
+        throw new Error('interrupted commit conflicts with current authority; preserve and resolve it');
+    const prepared = await prepareStagedWrite(root, record.pending);
+    try {
+        if (identity === record.before)
+            await adapter.save(record.after);
+        await prepared.commit();
+        await rm(path);
+    }
+    finally {
+        await prepared.cleanup();
+    }
 }
 export async function projectRoot(start = process.cwd()) {
     return findProjectRoot(start);
@@ -105,12 +139,7 @@ async function prepareStagedWrite(root, proposals) {
     };
 }
 function authorityProjection(snapshot) {
-    return {
-        ...structuredClone(snapshot),
-        proposals: snapshot.proposals
-            .filter(proposal => proposal.status !== 'pending')
-            .map(proposal => ({ ...structuredClone(proposal), operations: [] })),
-    };
+    return { ...structuredClone(snapshot), proposals: [] };
 }
 function stable(snapshot) {
     return JSON.stringify(snapshot);

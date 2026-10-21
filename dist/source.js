@@ -21,25 +21,19 @@ export type Prose = string | MarkdownDocument
 export type DefinitionStatus = 'candidate' | 'shaping' | 'frozen' | 'deferred' | 'superseded' | 'retired'
 export type DecisionStatus = 'open' | 'proposed' | 'approved' | 'deferred' | 'superseded'
 export type HandoffStatus = 'current' | 'in_delivery' | 'stale' | 'closed'
-export type RealizationStatus = 'in_progress' | 'closure_submitted' | 'closed' | 'reopened'
-export type ClosureStatus = 'submitted' | 'accepted' | 'rejected'
+export type RealizationStatus = 'in_progress' | 'closure_submitted' | 'closed' | 'reopened' | 'stale'
+export type ClosureStatus = 'submitted' | 'accepted' | 'rejected' | 'stale'
 export interface AcceptanceCriterion { readonly id: string; readonly text: string }
-export interface ModuleContract { readonly objective: Prose; readonly frozenBehavior: readonly string[]; readonly scope: readonly string[]; readonly nonGoals: readonly string[]; readonly acceptance: readonly AcceptanceCriterion[]; readonly requiredChecks: readonly { readonly id: string; readonly description: string }[]; readonly checkRationale: string }
+export interface ModuleContract { readonly objective: Prose; readonly frozenBehavior: readonly string[]; readonly scope: readonly string[]; readonly nonGoals: readonly string[]; readonly acceptance: readonly AcceptanceCriterion[]; readonly requiredChecks: readonly { readonly id: string; readonly description: string }[] | null; readonly checkRationale: string | null }
 export interface ModuleNode { readonly kind: 'module'; readonly id: string; readonly title: string; readonly phase: string; readonly definitionStatus: DefinitionStatus; readonly dependencies: readonly ModuleNode[]; readonly contract: ModuleContract; readonly createdAt: string; readonly updatedAt: string }
 export interface Alternative { readonly id: string; readonly label: string; readonly tradeoffs?: string }
 export interface ResourceNode { readonly id: string; readonly kind: 'commit' | 'pull_request' | 'file' | 'release' | 'deployment' | 'evidence'; readonly uri: string; readonly revision?: string }
 export interface DecisionNode { readonly kind: 'decision'; readonly id: string; readonly module: ModuleNode; readonly question: string; readonly status: DecisionStatus; readonly alternatives: readonly Alternative[]; readonly recommendation?: string; readonly ownerChoice?: string; readonly rationale?: string; readonly prerequisites: readonly DecisionNode[]; readonly evidence: readonly ResourceNode[]; readonly supersedes?: DecisionNode; readonly createdAt: string; readonly updatedAt: string }
-export interface FrozenDefinition {
-  readonly module: Omit<ModuleNode, 'kind' | 'dependencies' | 'contract'> & { readonly dependencies: readonly string[]; readonly contract: Omit<ModuleContract, 'objective'> & { readonly objective: string | Omit<MarkdownDocument, typeof markdownBrand> } }
-  readonly decisions: readonly (Omit<DecisionNode, 'kind' | 'module' | 'prerequisites' | 'evidence' | 'supersedes'> & { readonly moduleId: string; readonly prerequisites: readonly string[]; readonly evidenceRefs: readonly string[]; readonly supersedes?: string })[]
-}
-export interface HandoffRevisionCorrection { readonly from: number; readonly to: number; readonly reason: string; readonly evidenceRefs: readonly string[]; readonly proposalId: string; readonly revision: number; readonly correctedAt: string }
-export interface HandoffNode { readonly expectedAssignee?: string; readonly productRevisionCorrections?: readonly HandoffRevisionCorrection[]; readonly frozenDefinition: FrozenDefinition; readonly kind: 'handoff'; readonly id: string; readonly module: ModuleNode; readonly revision: number; readonly productRevision: number; readonly status: HandoffStatus; readonly decisions: readonly DecisionNode[]; readonly contractDigest: string; readonly createdAt: string }
-export interface RealizationNode { readonly kind: 'realization'; readonly id: string; readonly module: ModuleNode; readonly handoff: HandoffNode; readonly handoffRevision: number; readonly status: RealizationStatus; readonly agent: string; readonly implementation: readonly ResourceNode[]; readonly startedAt: string; readonly updatedAt: string }
+export interface HandoffNode { readonly expectedAssignee?: string; readonly kind: 'handoff'; readonly id: string; readonly module: ModuleNode; readonly status: HandoffStatus; readonly decisions: readonly DecisionNode[]; readonly contractDigest: string; readonly createdAt: string }
+export interface RealizationNode { readonly kind: 'realization'; readonly id: string; readonly module: ModuleNode; readonly handoff: HandoffNode; readonly definitionDigest: string; readonly status: RealizationStatus; readonly agent: string; readonly implementation: readonly ResourceNode[]; readonly startedAt: string; readonly updatedAt: string }
 export interface AcceptanceEvidenceNode { readonly acceptanceId: string; readonly evidence: readonly ResourceNode[]; readonly result: 'pass' | 'partial' | 'not_met' }
-export interface ClosureNode { readonly kind: 'closure'; readonly id: string; readonly realization: RealizationNode; readonly handoff: HandoffNode; readonly handoffRevision: number; readonly status: ClosureStatus; readonly implementation: readonly ResourceNode[]; readonly deliveredBehavior: readonly string[]; readonly acceptanceEvidence: readonly AcceptanceEvidenceNode[]; readonly checks: readonly { readonly id: string; readonly revision: string; readonly command?: string; readonly system?: string; readonly result: 'pass' | 'fail' | 'not_run'; readonly evidence?: ResourceNode }[]; readonly deviations: readonly { readonly description: string; readonly consequence: string; readonly requiresProductDecision: boolean }[]; readonly residualRisks: readonly string[]; readonly newProductQuestions: readonly string[]; readonly deployment?: { readonly environment: string; readonly revision: string; readonly evidence: ResourceNode }; readonly migrations?: readonly string[]; readonly cleanup?: readonly string[]; readonly submittedAt: string; readonly decidedAt?: string; readonly verifier?: string; readonly rejectionReason?: string }
-export interface ProposalAuditNode { readonly kind: 'proposal-audit'; readonly id: string; readonly status: 'approved' | 'rejected'; readonly summary: string; readonly baseRevision: number; readonly scopeDigest?: string; readonly baseDigest: string; readonly submittedAt: string; readonly decidedAt?: string; readonly rejectionReason?: string }
-export interface ProductAuthority { readonly schemaVersion: 3; readonly revision: number; readonly product: { readonly id: string; readonly title: string; readonly initialIdea: string; readonly activeSlice: string; readonly profile: string; readonly createdAt: string; readonly updatedAt: string }; readonly modules: readonly ModuleNode[]; readonly decisions: readonly DecisionNode[]; readonly proposals: readonly ProposalAuditNode[]; readonly handoffs: readonly HandoffNode[]; readonly realizations: readonly RealizationNode[]; readonly closures: readonly ClosureNode[]; readonly resources: readonly ResourceNode[] }
+export interface ClosureNode { readonly kind: 'closure'; readonly id: string; readonly realization: RealizationNode; readonly handoff: HandoffNode; readonly definitionDigest: string; readonly status: ClosureStatus; readonly implementation: readonly ResourceNode[]; readonly deliveredBehavior: readonly string[]; readonly acceptanceEvidence: readonly AcceptanceEvidenceNode[]; readonly checks: readonly { readonly id: string; readonly revision: string; readonly command?: string; readonly system?: string; readonly result: 'pass' | 'fail' | 'not_run'; readonly evidence?: ResourceNode }[]; readonly deviations: readonly { readonly description: string; readonly consequence: string; readonly requiresProductDecision: boolean }[]; readonly residualRisks: readonly string[]; readonly newProductQuestions: readonly string[]; readonly deployment?: { readonly environment: string; readonly revision: string; readonly evidence: ResourceNode }; readonly migrations?: readonly string[]; readonly cleanup?: readonly string[]; readonly submittedAt: string; readonly decidedAt?: string; readonly verifier?: string; readonly rejectionReason?: string }
+export interface ProductAuthority { readonly schemaVersion: 4; readonly revision: number; readonly product: { readonly id: string; readonly title: string; readonly initialIdea: string; readonly activeSlice: string; readonly profile: string; readonly createdAt: string; readonly updatedAt: string }; readonly modules: readonly ModuleNode[]; readonly decisions: readonly DecisionNode[]; readonly handoffs: readonly HandoffNode[]; readonly realizations: readonly RealizationNode[]; readonly closures: readonly ClosureNode[]; readonly resources: readonly ResourceNode[] }
 `;
 const assetDeclaration = `// GENERATED by Suo. Markdown is a first-class imported resource.
 declare module '*.md' {
@@ -143,8 +137,6 @@ export async function saveAuthority(snapshot, root) {
         const handoffFiles = fileMap(snapshot.handoffs, 'handoffs');
         const realizationFiles = fileMap(snapshot.realizations, 'realizations');
         const closureFiles = fileMap(snapshot.closures, 'closures');
-        const proposalAudits = snapshot.proposals.filter(proposal => proposal.status !== 'pending');
-        const proposalFiles = fileMap(proposalAudits, 'proposals');
         const resources = collectResources(snapshot);
         const resourceFiles = fileMap(resources, 'resources');
         for (const module of snapshot.modules) {
@@ -171,9 +163,7 @@ export async function saveAuthority(snapshot, root) {
             await writeNode(temporary, realizationFiles.get(realization.id), renderRealization(realization, moduleFiles, handoffFiles, realizationFiles, resourceFiles, temporary));
         for (const closure of snapshot.closures)
             await writeNode(temporary, closureFiles.get(closure.id), renderClosure(closure, realizationFiles, handoffFiles, closureFiles, resourceFiles, temporary));
-        for (const proposal of proposalAudits)
-            await writeNode(temporary, proposalFiles.get(proposal.id), renderProposalAudit(proposal));
-        await writeFile(join(temporary, sourceRootFileName), renderRoot(snapshot, { moduleFiles, decisionFiles, handoffFiles, realizationFiles, closureFiles, proposalFiles, resourceFiles }, temporary), 'utf8');
+        await writeFile(join(temporary, sourceRootFileName), renderRoot(snapshot, { moduleFiles, decisionFiles, handoffFiles, realizationFiles, closureFiles, resourceFiles }, temporary), 'utf8');
         const backup = `${target}.backup-${process.pid.toString()}`;
         await rm(backup, { recursive: true, force: true });
         if (await exists(target))
@@ -198,7 +188,7 @@ export async function saveAuthority(snapshot, root) {
     }
 }
 function normalizeAuthority(source) {
-    if (source.schemaVersion !== 3)
+    if (source.schemaVersion !== 4)
         throw new Error(`unsupported Suo source schema ${String(source.schemaVersion)}`);
     assertCanonicalReferences(source);
     const closures = source.closures.map(value => {
@@ -213,19 +203,21 @@ function normalizeAuthority(source) {
             ...(deployment ? { deployment: { environment: deployment.environment, revision: deployment.revision, evidenceRef: deployment.evidence.uri } } : {}),
         };
     });
-    const closureByRealization = new Map(closures.map(value => [value.realizationId, value.id]));
+    const closureByRealization = new Map([...closures].sort((a, b) => Number(['submitted', 'accepted'].includes(a.status)) - Number(['submitted', 'accepted'].includes(b.status)) || a.submittedAt.localeCompare(b.submittedAt) || a.id.localeCompare(b.id)).map(value => [value.realizationId, value.id]));
     const snapshot = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: source.revision,
         product: { ...source.product },
         modules: source.modules.map(value => ({ ...without(value, ['kind', 'dependencies']), dependencies: value.dependencies.map(dependency => dependency.id) })),
         decisions: source.decisions.map(value => ({ ...without(value, ['kind', 'module', 'evidence', 'supersedes']), moduleId: value.module.id, prerequisites: value.prerequisites.map(prerequisite => prerequisite.id), evidenceRefs: value.evidence.map(resource => resource.uri), ...(value.supersedes ? { supersedes: value.supersedes.id } : {}) })),
-        proposals: source.proposals.map(value => ({ ...without(value, ['kind']), operations: [] })),
+        proposals: [],
         handoffs: source.handoffs.map(value => ({ ...without(value, ['kind', 'module', 'decisions']), moduleId: value.module.id, decisionIds: value.decisions.map(decision => decision.id) })),
         realizations: source.realizations.map(value => ({ ...without(value, ['kind', 'module', 'handoff', 'implementation', 'agent']), agent: normalizedIdentity(value.agent, `${value.id}.agent`), moduleId: value.module.id, handoffId: value.handoff.id, implementationRefs: value.implementation.map(toImplementationRef), ...(closureByRealization.has(value.id) ? { closureId: closureByRealization.get(value.id) } : {}) })),
         closures,
     };
-    return reconcileImportedAuthority(snapshot);
+    const current = reconcileImportedAuthority(snapshot);
+    assertValidSnapshot(current);
+    return current;
 }
 function authorityComparable(snapshot) {
     const byId = (values) => [...values].sort((a, b) => a.id.localeCompare(b.id));
@@ -233,7 +225,7 @@ function authorityComparable(snapshot) {
         ...structuredClone(snapshot),
         modules: byId(structuredClone(snapshot.modules)),
         decisions: byId(structuredClone(snapshot.decisions)),
-        proposals: byId(snapshot.proposals.map(proposal => ({ ...structuredClone(proposal), operations: [] }))),
+        proposals: [],
         handoffs: byId(structuredClone(snapshot.handoffs)),
         realizations: byId(structuredClone(snapshot.realizations)),
         closures: byId(structuredClone(snapshot.closures)),
@@ -333,20 +325,16 @@ function renderClosure(closure, realizations, handoffs, closures, resources, bas
     void base;
     return renderFile(imports, 'ClosureNode', { kind: 'closure', ...without(closure, ['realizationId', 'handoffId', 'implementationRefs', 'acceptanceEvidence', 'checks', 'deployment']), realization: raw('realization'), handoff: raw('handoff'), implementation, acceptanceEvidence, checks, ...(deployment ? { deployment } : {}) });
 }
-function renderProposalAudit(proposal) {
-    return renderTypedNode('ProposalAuditNode', { kind: 'proposal-audit', ...without(proposal, ['operations']) });
-}
 function renderRoot(snapshot, maps, base) {
     const imports = [];
     const refs = (map, prefix) => [...map.entries()].map(([_, file], index) => { const name = `${prefix}${index.toString()}`; imports.push(importDefault(name, `./${file.replace(/\.ts$/, '.js')}`)); return raw(name); });
     void base;
     return renderFile(imports, 'ProductAuthority', {
-        schemaVersion: 3,
+        schemaVersion: 4,
         revision: snapshot.revision,
         product: snapshot.product,
         modules: refs(maps.moduleFiles, 'module'),
         decisions: refs(maps.decisionFiles, 'decision'),
-        proposals: refs(maps.proposalFiles, 'proposal'),
         handoffs: refs(maps.handoffFiles, 'handoff'),
         realizations: refs(maps.realizationFiles, 'realization'),
         closures: refs(maps.closureFiles, 'closure'),

@@ -1,5 +1,5 @@
 import { assertValidSnapshot } from './validation.js';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { moduleTopologicalOrder, nextAction, proseText } from './core.js';
 import { findProjectRoot } from './source.js';
@@ -56,20 +56,16 @@ export function renderDag(snapshot) {
 `;
 }
 export function renderHandoff(snapshot, handoff, historical) {
-    // Current definitions are never evidence of a legacy handoff's original body.
     assertValidSnapshot(snapshot);
-    const frozen = handoff.frozenDefinition;
-    const corrections = (handoff.productRevisionCorrections ?? []).map(value => `\nRevision correction: ${value.from} → ${value.to}; approved in Product revision ${value.revision} by proposal \`${value.proposalId}\` at ${value.correctedAt}. ${value.reason}\nEvidence: ${value.evidenceRefs.join(', ')}\n`).join('');
-    const { module, decisions } = frozen;
+    const module = snapshot.modules.find(value => value.id === handoff.moduleId);
+    const decisions = snapshot.decisions.filter(value => value.moduleId === module.id);
     return `${generatedBanner}
 # Handoff: ${module.title}
 
-- Handoff: \`${handoff.id}\` revision ${handoff.revision}
-- Product revision: ${handoff.productRevision}
+- Handoff: \`${handoff.id}\`
 - Status: ${handoff.status}
 - Expected assignee: ${handoff.expectedAssignee ?? 'unspecified'} (assignment acceptance is not implied)
 - Contract digest: \`${handoff.contractDigest}\`
-${corrections}
 ## Product objective
 ${proseText(module.contract.objective)}
 
@@ -89,11 +85,11 @@ ${lineList(module.contract.nonGoals)}
 ${module.contract.acceptance.map(value => `- **${value.id}:** ${value.text}`).join('\n')}
 
 ## Required deterministic checks
-${lineList(module.contract.requiredChecks.map(value => `${value.id}: ${value.description}`))}
+${lineList((module.contract.requiredChecks ?? []).map(value => `${value.id}: ${value.description}`))}
 Rationale: ${module.contract.checkRationale}
 
 ## Delivery boundary
-Implementation choices remain with Delivery unless they change the frozen behavior above. Closure must reference this exact handoff revision and provide evidence for every acceptance criterion.
+Implementation choices remain with Delivery unless they change the frozen behavior above. Closure must reference this current definition digest and provide evidence for every acceptance criterion.
 `;
 }
 export function renderClosure(snapshot, closure) {
@@ -103,7 +99,7 @@ export function renderClosure(snapshot, closure) {
 # Closure: ${module.title}
 
 - Closure: \`${closure.id}\`
-- Handoff: \`${closure.handoffId}\` revision ${closure.handoffRevision}
+- Handoff: \`${closure.handoffId}\` definition ${closure.definitionDigest}
 - Status: ${closure.status}
 - Verifier: ${closure.verifier ?? 'Pending'}
 
@@ -140,6 +136,13 @@ export async function generateArtifacts(snapshot, root = process.cwd()) {
         ...snapshot.handoffs.map(value => [join(handoffs, `${safe(value.id)}.md`), renderHandoff(snapshot, value)]),
         ...snapshot.closures.map(value => [join(closures, `${safe(value.id)}.md`), renderClosure(snapshot, value)]),
     ];
+    const currentPaths = new Set(files.map(([path]) => path));
+    for (const directory of [handoffs, closures])
+        for (const name of await readdir(directory)) {
+            const path = join(directory, name);
+            if (name.endsWith('.md') && !currentPaths.has(path) && (await readFile(path, 'utf8')).startsWith(generatedBanner))
+                await rm(path);
+        }
     for (const [path, content] of files)
         await writeFile(path, content, 'utf8');
     return files.map(([path]) => path);

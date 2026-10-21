@@ -1,8 +1,8 @@
 export type DefinitionStatus = 'candidate' | 'shaping' | 'frozen' | 'deferred' | 'superseded' | 'retired';
 export type DecisionStatus = 'open' | 'proposed' | 'approved' | 'deferred' | 'superseded';
 export type HandoffStatus = 'current' | 'in_delivery' | 'stale' | 'closed';
-export type RealizationStatus = 'in_progress' | 'closure_submitted' | 'closed' | 'reopened';
-export type ClosureStatus = 'submitted' | 'accepted' | 'rejected';
+export type RealizationStatus = 'in_progress' | 'closure_submitted' | 'closed' | 'reopened' | 'stale';
+export type ClosureStatus = 'submitted' | 'accepted' | 'rejected' | 'stale';
 export type ProposalStatus = 'pending' | 'approved' | 'rejected';
 export interface MarkdownDocument {
     readonly kind: 'markdown';
@@ -19,8 +19,8 @@ export interface ModuleContract {
     requiredChecks: Array<{
         id: string;
         description: string;
-    }>;
-    checkRationale: string;
+    }> | null;
+    checkRationale: string | null;
     objective: Prose;
     frozenBehavior: string[];
     scope: string[];
@@ -57,27 +57,11 @@ export interface Decision {
     createdAt: string;
     updatedAt: string;
 }
-export interface FrozenDefinition {
-    module: ProductModule;
-    decisions: Decision[];
-}
-export interface HandoffRevisionCorrection {
-    from: number;
-    to: number;
-    reason: string;
-    evidenceRefs: string[];
-    proposalId: string;
-    revision: number;
-    correctedAt: string;
-}
+/** Current delivery boundary; Git retains prior definitions. */
 export interface Handoff {
     expectedAssignee?: string;
-    productRevisionCorrections?: HandoffRevisionCorrection[];
-    frozenDefinition: FrozenDefinition;
     id: string;
     moduleId: string;
-    revision: number;
-    productRevision: number;
     status: HandoffStatus;
     decisionIds: string[];
     contractDigest: string;
@@ -92,7 +76,7 @@ export interface Realization {
     id: string;
     moduleId: string;
     handoffId: string;
-    handoffRevision: number;
+    definitionDigest: string;
     status: RealizationStatus;
     agent: string;
     implementationRefs: ImplementationRef[];
@@ -111,7 +95,7 @@ export interface ClosureDeviation {
     requiresProductDecision: boolean;
 }
 export interface ClosureSubmission {
-    handoffRevision: number;
+    definitionDigest: string;
     implementationRefs: ImplementationRef[];
     deliveredBehavior: string[];
     acceptanceEvidence: AcceptanceEvidence[];
@@ -138,7 +122,7 @@ export interface Closure extends ClosureSubmission {
     id: string;
     realizationId: string;
     handoffId: string;
-    handoffRevision: number;
+    definitionDigest: string;
     status: ClosureStatus;
     submittedAt: string;
     decidedAt?: string;
@@ -214,13 +198,6 @@ export type ProductOperation = {
     moduleId: string;
     expectedAssignee?: string;
 } | {
-    type: 'correct_handoff_product_revision';
-    handoffId: string;
-    expectedFrom: number;
-    to: number;
-    reason: string;
-    evidenceRefs: string[];
-} | {
     type: 'reopen_closure';
     realizationId: string;
     reason: string;
@@ -255,7 +232,7 @@ export interface ClosureEnvelope {
 }
 export type SubmissionEnvelope = ProposalSubmission | ClosureEnvelope;
 export interface SuoSnapshot {
-    schemaVersion: 2;
+    schemaVersion: 3;
     revision: number;
     product: {
         id: string;

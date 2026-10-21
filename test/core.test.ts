@@ -46,7 +46,7 @@ function frozenModule(): SuoSnapshot {
 }
 
 const closure = (): ClosureSubmission => ({
-  handoffRevision: 1,
+  definitionDigest: frozenModule().handoffs[0]!.contractDigest,
   implementationRefs: [{ kind: 'commit', uri: 'https://example.test/commit/abc', revision: 'abc' }],
   deliveredBehavior: ['a behavior'],
   acceptanceEvidence: [{ acceptanceId: 'a-acceptance', evidence: ['pnpm test: pass'], result: 'pass' }],
@@ -88,7 +88,7 @@ describe('Suo', () => {
   it('generates a versioned handoff and closes only with complete evidence', () => {
     let snapshot = frozenModule()
     const handoff = snapshot.handoffs[0]!
-    expect(handoff).toMatchObject({ id: 'handoff:module:a:1', revision: 1, status: 'current' })
+    expect(handoff).toMatchObject({ id: 'handoff:module:a', status: 'current' })
     expect(() => startRealization(snapshot, handoff.id, { id: 'missing-agent' } as { id: string; agent: string }, { now: time })).toThrow('agent identity is required')
     snapshot = startRealization(snapshot, handoff.id, { id: 'realization:a', agent: 'external-agent ' }, { now: time })
     expect(snapshot.realizations[0]?.agent).toBe('external-agent')
@@ -117,8 +117,8 @@ describe('Suo', () => {
     snapshot = connectModules(snapshot, 'module:b', 'module:a', { now: time })
     snapshot = freezeModule(snapshot, 'module:b', { now: time })
     snapshot = reopenDecision(snapshot, 'decision:a', { id: 'decision:a:v2', now: time })
-    expect(snapshot.decisions.find(value => value.id === 'decision:a')).toMatchObject({ status: 'superseded', ownerChoice: 'A' })
-    expect(snapshot.decisions.find(value => value.id === 'decision:a:v2')).toMatchObject({ status: 'proposed', supersedes: 'decision:a' })
+    expect(snapshot.decisions.find(value => value.id === 'decision:a')).toMatchObject({ status: 'proposed' })
+    expect(snapshot.decisions.find(value => value.id === 'decision:a:v2')).toBeUndefined()
     expect(snapshot.modules.find(value => value.id === 'module:a')?.definitionStatus).toBe('shaping')
     expect(snapshot.modules.find(value => value.id === 'module:b')?.definitionStatus).toBe('shaping')
     expect(snapshot.handoffs.every(value => value.status === 'stale')).toBe(true)

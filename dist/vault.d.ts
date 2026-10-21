@@ -1,9 +1,8 @@
 import type { SuoSnapshot } from './model.js';
 import type { VaultNote } from './vault-notes.js';
 export declare const vaultMarker = "suo.vault.json";
-interface Revision {
-    format: 1;
-    previous: string | null;
+interface CurrentState {
+    format: 2;
     snapshot: SuoSnapshot;
     digest: string;
 }
@@ -15,7 +14,7 @@ export interface VaultDraft {
     changed: boolean;
     before: unknown;
     after: unknown;
-    head: Revision;
+    head: CurrentState;
 }
 export declare function isVault(root: string): Promise<boolean>;
 export declare function initVault(root: string, idea: string, title?: string): Promise<SuoSnapshot>;
@@ -29,6 +28,6 @@ export declare function compileVault(root: string): Promise<{
 }>;
 export declare function approveVaultDraft(root: string, token: string): Promise<SuoSnapshot>;
 export declare function saveVaultAuthority(snapshot: SuoSnapshot, root: string): Promise<void>;
-export declare function readVaultHistory(root: string): Promise<Revision[]>;
+export declare function readVaultCurrent(root: string): Promise<CurrentState>;
 export declare function recoverVault(root: string): Promise<string>;
 export {};

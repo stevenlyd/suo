@@ -25,7 +25,7 @@ try {
   }
   const snapshotPath = join(root, 'snapshot.json')
   const inspected = JSON.parse(run(root, 'inspect'))
-  const snapshot = { schemaVersion: 2, revision: inspected.revision, product: inspected.product, modules: [], decisions: [], proposals: [], handoffs: [], realizations: [], closures: [] }
+  const snapshot = { schemaVersion: 3, revision: inspected.revision, product: inspected.product, modules: [], decisions: [], proposals: [], handoffs: [], realizations: [], closures: [] }
   await writeFile(snapshotPath, JSON.stringify(snapshot))
   assert.equal(JSON.parse(run(root, 'diagnose', snapshotPath)).status, 'valid')
   const badSnapshot = JSON.stringify({ ...snapshot, extra: true })
@@ -42,12 +42,11 @@ try {
   ])
   await cp(join(root, 'suo'), join(clone, 'suo'), { recursive: true })
   run(clone, 'check')
-  const path = revision => join(clone, `docs/suo/HANDOFFS/handoff_module_feature_${revision}.md`)
-  const first = await readFile(path(1), 'utf8')
-  assert.match(first, /Original CLI objective/)
-  assert.doesNotMatch(first, /New CLI objective/)
-  assert.match(first, /Status: stale/)
-  assert.match(await readFile(path(2), 'utf8'), /New CLI objective/)
+  const path = () => join(clone, 'docs/suo/HANDOFFS/handoff_module_feature.md')
+  const first = await readFile(path(), 'utf8')
+  assert.match(first, /New CLI objective/)
+  assert.doesNotMatch(first, /Original CLI objective/)
+  assert.match(first, /Status: current/)
   await rm(join(clone, 'docs'), { recursive: true })
   run(clone, 'check')
   assert.equal(await readFile(path(1), 'utf8'), first)
