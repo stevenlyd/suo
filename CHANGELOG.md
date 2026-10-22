@@ -8,7 +8,7 @@ See [release process](https://github.com/stevenlyd/suo/blob/main/docs/releases.m
 
 ## [Unreleased]
 
-## [0.8.3] - 2026-10-21
+## [0.8.3] - 2026-10-22
 
 ### Changed
 
