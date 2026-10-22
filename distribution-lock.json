@@ -5,7 +5,7 @@
     ".agents/plugins/marketplace.json": "6e9399b2bb08b7fbbffcd2da44fea4b48a63819835982c1612be73d81af6c9d2",
     ".claude-plugin/marketplace.json": "e180f12bdccf63d8bae216e5f92f13c46e246cc478c046d36e76b856a9dc44b9",
     ".claude-plugin/plugin.json": "5298166b85c642e73b5ad1b7b2b772378e88e2459a7de5df957d226a41fcccf7",
-    "CHANGELOG.md": "86111384449117e4ef7e430b9792a3d745a399bc8afde59fd41c3e9584c977b5",
+    "CHANGELOG.md": "4faca6ff155b96a816a18d132d05ba6997377929cb0580a3bcc86f4d2d1d506d",
     "LICENSE": "6e4f7d62e5ac28bdcf4b71c4d81deade0a89c36aea3988f34d1ff73d5a1d4145",
     "README.md": "65a97021b2ba48959242d6601c563a0de33a287bcc11cdd66a4d98f882582b1b",
     "dist/cli.d.ts": "43e818adf60173644896298637f47b01d5819b17eda46eaa32d0c7d64724d012",
