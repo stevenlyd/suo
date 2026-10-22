@@ -8,6 +8,23 @@ See [release process](https://github.com/stevenlyd/suo/blob/main/docs/releases.m
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-22
+
+### Changed
+
+- Clarifies adopted-but-unimplemented snapshot definitions, snapshot-only next, and expected-assignee semantics independently of global work tracking. No schema or runtime change.
+
+- See the [Suo contract](https://github.com/stevenlyd/suo/blob/main/docs/unit-runtime.md) for scope and verification limits.
+
+### Breaking changes
+
+- None. Schema 5 remains unchanged.
+
+### Migration
+
+- No data migration. Use project work-index conventions for cross-branch discovery; current definitions and implementation applicability remain separate.
+
+
 ## [0.8.3] - 2026-10-22
 
 ### Changed

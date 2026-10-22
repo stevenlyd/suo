@@ -1,7 +1,7 @@
 ---
 name: suo
 description: Define current repository product Units, their dependencies and honest implementation coverage; collaborate through Git with deterministic validation.
-version: 0.8.3
+version: 0.8.4
 compatibility: "Requires Node.js 22.18+ and the matching suo CLI."
 ---
 
@@ -40,3 +40,7 @@ When Duet is configured, keep the owning engineering record discoverable via Uni
 Strict runtime shapes, canonical references, single-parent containment, typed dependency and derived phase graphs reject malformed input and deadlocks. All owned graph/hierarchy traversals use explicit stacks/queues. Natural-language constraints and behavior still require semantic review, including inherited constraints. Static consistency is not authenticated identity or actual acceptance.
 
 Writes stage and validate source, compare the observed token, then use a lock and recovery journal. Do not read a pending working-tree transaction as final. `recover` verifies identities before restoring; conflicting data stays preserved. A crash can leave a lock: verify no writer remains before manual lock removal. Do not bypass validation to restore old formats. Roll back project and matching client together only where reviewed; after schema-5 edits, an old client alone is not a data rollback.
+
+## Snapshot definitions and work discovery
+
+Current product definitions include adopted behavior that is not implemented yet. `approved` is a product decision; implementation and its applicability remain separate. Missing coverage is unknown, not not-started. Proposed/deferred definitions describe the selected snapshot, not a global task queue. `expectedAssignee` is a versioned expectation, not live assignment, consent or activity. `next` projects this snapshot only; use the project's external work index for cross-branch tasks. Cancelling a task or implementation approach does not revoke an adopted definition. Product decisions may be reviewed/promoted independently of code; do not fabricate implementation or acceptance to publish a definition.

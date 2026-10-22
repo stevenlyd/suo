@@ -223,3 +223,7 @@ The main implementation lives in `src/`, the committed runtime in `dist/`, the c
 ## License
 
 [MIT](LICENSE)
+
+## Snapshot definitions and work discovery
+
+Current product definitions include adopted behavior that is not implemented yet. `approved` is a product decision; implementation and its applicability remain separate. Missing coverage is unknown, not not-started. Proposed/deferred definitions describe the selected snapshot, not a global task queue. `expectedAssignee` is a versioned expectation, not live assignment, consent or activity. `next` projects this snapshot only; use the project's external work index for cross-branch tasks. Cancelling a task or implementation approach does not revoke an adopted definition. Product decisions may be reviewed/promoted independently of code; do not fabricate implementation or acceptance to publish a definition.
