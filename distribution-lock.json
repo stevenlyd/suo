@@ -1,13 +1,13 @@
 {
   "format": 1,
-  "version": "0.8.2",
+  "version": "0.8.3",
   "files": {
     ".agents/plugins/marketplace.json": "6e9399b2bb08b7fbbffcd2da44fea4b48a63819835982c1612be73d81af6c9d2",
-    ".claude-plugin/marketplace.json": "247ba08feb6722ebe09b333a97aa5c652a7ffa88c5a90af6774d347726bd8f30",
-    ".claude-plugin/plugin.json": "8a77d581024fb0576a96af582f34ab3930c40efcf1fc6049a74b161ddd642d4d",
-    "CHANGELOG.md": "ed55e5ea12f6c7aee94d1ed5435bee37c2d15516b05837a4c74fec66f0c07558",
+    ".claude-plugin/marketplace.json": "293f9acc18c4111673ba75b971291e858d4baeb085a11a4cc002243869e9f008",
+    ".claude-plugin/plugin.json": "65dd7afe826f22e56d0f36b6b8b2fcd81a2527824110f154158d2146ef36f341",
+    "CHANGELOG.md": "00dc89f33432465422191cec0dbf6d3d44d153e96d7d442f086b30e6b9ba1912",
     "LICENSE": "6e4f7d62e5ac28bdcf4b71c4d81deade0a89c36aea3988f34d1ff73d5a1d4145",
-    "README.md": "3c011cce9969586f065d252c26003c4f8c161666aa4245a4fea2e653bb5beec9",
+    "README.md": "a25d4f86920a89abbdbd10ecff8a77f18514802cd47ec418074698e86dfedc78",
     "dist/cli.d.ts": "43e818adf60173644896298637f47b01d5819b17eda46eaa32d0c7d64724d012",
     "dist/cli.js": "f581fc4e606140acac81a19a1aaf0ba90832aeee5cd7d3d26ab200ae79742ddd",
     "dist/cli.js.map": "1c2ef1d66a177d8bf4e45296c47b86965773df9276addc75823c80c4cc23d22a",
@@ -55,13 +55,13 @@
     "docs/testing/distribution.md": "672ca0c6171fce2af5a8421b43c38eaea7cbfd5faf45a95435af4ceefac3e9ce",
     "docs/unit-runtime.md": "a5760394a2cbf4aab22581edbde3a386e1beeae4aeb688b0251d8f92d22e7229",
     "docs/validation-upgrade.md": "bb0a4b10d276fa0b9b4d418679cc091468e6a577c015650655236d00f04c16cb",
-    "gemini-extension.json": "3aefc850fa0aea8240a31c7474a31963f2ee58d024d33ebb6986fe8f380b51c9",
-    "package.json": "077b81e823bbe21d70fe13526acb43db008f335c7c29c2b427c71c3abbfd828f",
-    "plugin.json": "5027113fede0559cefcced56e5696be68ad5045413ea725840beed5d43dccf66",
+    "gemini-extension.json": "3a68866adffd42ab1d05547715205575f5d8359d51f4a3a96da44110002dedff",
+    "package.json": "94db314b572b319e31652fff6bc796db05a87dd7698ab8fe695abe0ce4e22ad3",
+    "plugin.json": "43a366ef04772c3685b8b552b88ae75d78dd2518b0e156a82596e8f9010e62b2",
     "schemas/compiled-snapshot.schema.json": "d7853ab0c13c99f074e647aba6e3820fe9644169447fbe90924add99ef43f77f",
     "schemas/vendor/README.md": "9317a7535a9ed9f0bd2b112256d5d77fdeac17532d55e4fe2681c95377ab8bb3",
     "schemas/vendor/agent-plugin-1.0.0.schema.json": "0a4aad95ce337878ad38802ebf0daa3fde76abe3f65400c86bcbb1ec0b3ab883",
     "scripts/distribution.mjs": "59c9a776ed2ffef82ae8fee54cd81960a46595b0fb58c4e8085c664bdcbdb076",
-    "skills/suo/SKILL.md": "7f830ff8ebbb1f743431383f96f43a3526108b55b65a1dd8ac9486e7e224a959"
+    "skills/suo/SKILL.md": "a213b5ca22428e1f43820e6f346d6fc3a287ca86bed92fa201dd92f62f1172d0"
   }
 }
