@@ -1,0 +1,11 @@
+# Suo writer protocol v1
+
+The tracked reserved file `suo/writer.json` has exactly `schemaVersion: 1`, `tool: "suo"`, stable `version`, `skillDigest`, and `runtimeDigest` (SHA-256). Skill identity includes its referenced resources. Runtime identity covers shipped JavaScript. It contains no timestamps, paths, assignees, CI/deployment claims or latest-version flags. Git binds the record to the content commit and retains history.
+
+`writer check` reports installed/recorded identity and unrecorded/same/newer compatibility without mutation. Older versions, malformed records and same-version changed packages fail closed. Newer is not automatically semantically compatible: validate the current source and follow explicit migration guidance. No network lookup or forced latest upgrade occurs.
+
+Unit template/save includes metadata in the existing directory transaction and recovery identities. `writer record --yes` is for direct Skill edits/external renderers: it validates current authority and records only the executing Suo package under the existing lock and stale-input guard. It does not rewrite product definitions or record any other tool. No-op same-version recording is stable. Commit the metadata with the content before publishing.
+
+A missing record is legacy/unknown, adopted only on a successful authorized write. There is no backfilled claim about historical writers. Old binaries predating the protocol cannot enforce a future gate; agents and downstream integrations must select a capable matching reader/writer. Editing JSON manually, bypassing the CLI or presenting an unrelated installed Skill cannot be prevented by advisory instructions. The record does not attest the host's in-memory session.
+
+Do not edit generated distribution manifests or installed caches to impersonate a version. A newer package must have a new version; rollback preserves the matching old repository snapshot. Keep failures and pending transactions visible instead of advancing metadata on an unsuccessful operation.

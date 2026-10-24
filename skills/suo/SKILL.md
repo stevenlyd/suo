@@ -1,7 +1,7 @@
 ---
 name: suo
 description: Define current repository product Units, their dependencies and honest implementation coverage; collaborate through Git with deterministic validation.
-version: 0.8.4
+version: 0.9.0
 compatibility: "Requires Node.js 22.18+ and the matching suo CLI."
 ---
 
@@ -10,6 +10,12 @@ compatibility: "Requires Node.js 22.18+ and the matching suo CLI."
 Suo describes the checked-out commit's current product definition and implementation coverage. Git owns history. A Unit can contain Units at any depth; module and feature are labels, not fixed layers. Use a bounded deliverable boundary when useful, not one Unit per sentence or decision. Current normative decisions, alternatives and unresolved questions stay attached to Units. An intended assignee is an expectation, never evidence that the person accepted the work.
 
 Before mutations, run `suo --version` from the selected runtime and match this skill version. Native plugin instructions and the separately installed Node runtime are different installations. Follow [native distribution](https://github.com/stevenlyd/suo/blob/main/docs/distribution.md) at the reviewed installed revision. Do not silently install a missing executable, copy skill files into managed caches or claim a host update updated the runtime/current session.
+
+## Writer provenance
+
+Before editing, run `suo --root PROJECT writer check` with this Skill's matching CLI. `suo/writer.json` records the last actual writer, not a latest-version requirement. Older versions must upgrade before writing; equal versions must match identity; newer versions review their migration guidance and migrate explicitly only if required. No command authorizes a semantic migration. A missing record means unknown history, not proof an old writer is safe.
+
+Successful template/apply/record operations include writer metadata atomically with authority. After Skill-driven document edits or external view generation, run `suo --root PROJECT writer record --yes` and commit `suo/writer.json` with the edited content. Versions and digests come from the executing package, never hand-entered. Read-only inspect/check/export/next/render and failed mutations do not record a writer. A record is declared package provenance, not proof of host session loading; confirm the actual loaded Skill matches the CLI. Suo owns only its own record and has no dependency on other workflow tools. See [writer protocol](references/writer.md).
 
 ## Read the actual snapshot
 
@@ -31,9 +37,9 @@ For a reviewed whole-snapshot update, write `{ "expectedToken": "OBSERVED_TOKEN"
 
 Inspect applicability after code, configuration, lockfile, dependency or definition changes. Stale/unknown mappings cannot support a current completion claim, even if a prior receipt said accepted. All source/config/new-file inputs are included conservatively except explicitly declared non-runtime paths and Suo authority/views. Review exclusions; do not hide indirect runtime inputs. LFS/gitlink or other unavailable inputs remain unknown. Source mappings cannot point into exclusions.
 
-Suo stores no current CI result, PR status, other-branch inclusion, deployment status or external execution approval. Committing a provider observation does not turn it into a current-code fact. Persist versioned test/check requirements and normative product decisions; Duet runs checks and queries providers/live manifests at use time. Product scope selection, declared implementation, behavioral verification, product acceptance and deployment authorization remain distinct.
+Suo stores no current CI result, PR status, other-branch inclusion, deployment status or external execution approval. Committing a provider observation does not turn it into a current-code fact. Persist versioned test/check requirements and normative product decisions; consuming engineering workflows run checks and query providers/live manifests at use time. Product scope selection, declared implementation, behavioral verification, product acceptance and deployment authorization remain distinct.
 
-When Duet is configured, keep the owning engineering record discoverable via Unit `documents` and update current implementation coverage for only the selected Units. Engineering records describe fixes and repository validation rules/mappings; do not turn Suo into a build-log ledger. Duet collects PR/full commit, exact-commit CI and live per-component artifact manifests externally, reports omitted/blocked/not-authorized steps, and checks links and current applicability before declaring delivery complete. A supplied link is not independent provider verification. No checklist grants deployment or destructive cleanup permission.
+Keep any owning engineering record discoverable via Unit `documents` and update current implementation coverage for only the selected Units. Engineering records describe fixes and repository validation rules/mappings; do not turn Suo into a build-log ledger. Consumers are responsible for live delivery verification and their own authorizations. A supplied link is not independent provider verification. Suo requires no particular engineering workflow tool, and no checklist grants deployment or destructive cleanup permission.
 
 ## Integrity and recovery
 
