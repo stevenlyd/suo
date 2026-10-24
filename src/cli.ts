@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { checkWriter, recordWriter } from './writer.js'
 import { renderUnits } from './unit-render.js'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -15,7 +16,8 @@ async function main(){
  const root=resolve(option('--root',process.cwd())!),target=option('--target','commit'),ref=option('--ref','HEAD')!
  if(!['commit','index','working-tree'].includes(target!))throw new Error('target must be commit, index or working-tree')
  const command=args.shift()??'help'
- if(command==='help'||command==='--help'){console.log('suo --version\nsuo --root PROJECT [--target commit|index|working-tree] [--ref REF] inspect|check|export|next|render\nsuo --root PROJECT apply ENVELOPE.json --yes\nsuo --root PROJECT record ENVELOPE.json --yes\nsuo --root PROJECT recover\nsuo template DIRECTORY --title TITLE\nCommit inspection is read-only. Working-tree is an explicit candidate, never HEAD. External CI/deployment state is not persisted.');return}
+ if(command==='help'||command==='--help'){console.log('suo --version\nsuo --root PROJECT [--target commit|index|working-tree] [--ref REF] inspect|check|export|next|render\nsuo --root PROJECT apply ENVELOPE.json --yes\nsuo --root PROJECT record ENVELOPE.json --yes\nsuo --root PROJECT recover\nsuo --root PROJECT writer check|record [--yes]\nsuo template DIRECTORY --title TITLE\nCommit inspection is read-only. Working-tree is an explicit candidate, never HEAD. External CI/deployment state is not persisted.');return}
+ if(command==='writer'){const action=args.shift();if(action==='check'&&!args.length){emit(await checkWriter(root));return}if(action==='record'&&args.length===1&&args[0]==='--yes'){await recordWriter(root);emit({recorded:true,path:'suo/writer.json'});return}throw new Error('writer check or writer record --yes required')}
  if(command==='recover'){if(args.length)throw new Error('unexpected recover arguments');await recoverUnits(root);emit({recovered:true});return}
  if(command==='template'){
   const destination=resolve(args.shift()??''),title=option('--title');if(!title||args.length)throw new Error('template requires destination and --title')

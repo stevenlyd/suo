@@ -1,3 +1,4 @@
+import { checkWriter, currentWriter, readWriter, requireCompatibleWriter, writerContents, writerPath } from './writer.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename, rm, readdir, lstat } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
@@ -68,6 +69,8 @@ async function verifyRecoveredSource(root, expected) {
 /** Called explicitly after a crash; a lock never silently expires. */
 export async function recoverUnits(root) {
     await withProjectLock(root, async () => {
+        const installed = await currentWriter();
+        requireCompatibleWriter(installed, await readWriter(root));
         const path = await safePath(root, journalName);
         if (!await exists(path))
             return;
@@ -78,6 +81,8 @@ export async function recoverUnits(root) {
         if (!/^\.suo\/unit-stage-[a-f0-9-]{36}$/.test(j.stage) || (j.before !== null && !/^[a-f0-9]{64}$/.test(j.before)) || !/^[a-f0-9]{64}$/.test(j.after))
             throw new Error('invalid transaction identity');
         const current = await sourceIdentity(root), stage = await safePath(root, j.stage), backup = join(stage, 'before');
+        for (const path of [`${j.stage}/suo/writer.json`, `${j.stage}/before/writer.json`])
+            requireCompatibleWriter(installed, await readWriter(root, path));
         if (current === j.after) {
             await verifyRecoveredSource(root, j.after);
             await rm(stage, { recursive: true, force: true });
@@ -102,6 +107,7 @@ export async function saveUnits(root, snapshot, expectedToken) {
     if (!/^[a-f0-9]{64}$/.test(expectedToken))
         throw new Error('observed repository content token required');
     await withProjectLock(root, async () => {
+        const { installed: writer } = await checkWriter(root);
         const journal = await safePath(root, journalName);
         if (await exists(journal))
             throw new Error('pending Unit transaction: recover before reading/writing');
@@ -112,7 +118,7 @@ export async function saveUnits(root, snapshot, expectedToken) {
         const observedAuthorityIdentity = observedAuthority.length ? digest(observedAuthority) : null;
         if (await sourceIdentity(root) !== observedAuthorityIdentity)
             throw new Error('authority contains unobserved or concurrently changed files; include it in the Git candidate');
-        if (observedAuthority.some(([path]) => path !== 'suo/ontology.d.ts' && !path.endsWith('.suo.ts')))
+        if (observedAuthority.some(([path]) => path !== 'suo/ontology.d.ts' && path !== writerPath && !path.endsWith('.suo.ts')))
             throw new Error('authority replacement would remove auxiliary files; migrate these explicitly first');
         resolveCoverageSymbols(snapshot, current);
         inspectUnits(snapshot, current.context);
@@ -124,6 +130,7 @@ export async function saveUnits(root, snapshot, expectedToken) {
                 await mkdir(dirname(join(stage, path)), { recursive: true });
                 await writeFile(join(stage, path), content);
             }
+            await writeFile(join(stage, writerPath), writerContents(writer));
             if (!isDeepStrictEqual(await loadUnits(stage), snapshot))
                 throw new Error('Unit source roundtrip mismatch');
             if ((await readRepository(root, 'working-tree')).token !== expectedToken)
@@ -156,6 +163,7 @@ export async function createUnitTemplate(root, snapshot) {
     await withProjectLock(root, async () => {
         if (await exists(await safePath(root, journalName)))
             throw new Error('pending Unit transaction: recover before initializing');
+        const { installed: writer } = await checkWriter(root);
         const destination = await safePath(root, 'suo');
         if (await exists(destination))
             throw new Error('authority already exists; inspect/migrate it rather than initializing over it');
@@ -166,6 +174,7 @@ export async function createUnitTemplate(root, snapshot) {
                 await mkdir(dirname(join(stage, path)), { recursive: true });
                 await writeFile(join(stage, path), content, { flag: 'wx' });
             }
+            await writeFile(join(stage, writerPath), writerContents(writer));
             if (!isDeepStrictEqual(await loadUnits(stage), snapshot))
                 throw new Error('template roundtrip mismatch');
             await rename(join(stage, 'suo'), destination);

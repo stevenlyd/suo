@@ -8,6 +8,21 @@ See [release process](https://github.com/stevenlyd/suo/blob/main/docs/releases.m
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-24
+
+### Added
+
+- Independent last-writer provenance in `suo/writer.json`, automatic atomic recording with Unit writes, and read-only `writer check` / explicit `writer record --yes` for Skill edits and external renderers.
+- Older writers are rejected; newer writers preserve explicit migration and semantic review boundaries. Read-only commands never advance provenance. Suo has no dependency on another workflow tool.
+
+### Breaking changes
+
+- Unit authority writes now include a reserved `suo/writer.json` file. Older clients do not enforce this protocol and must not write repositories after adoption.
+
+### Migration
+
+- Existing schema-5 repositories adopt on their next successful write; schema-5 product meaning is unchanged. Select matching Skill/CLI, inspect compatibility, and commit writer metadata with the content. Historical writer versions are not inferred. Rollback requires restoring a compatible repository and client together.
+
 ## [0.8.4] - 2026-10-22
 
 ### Changed

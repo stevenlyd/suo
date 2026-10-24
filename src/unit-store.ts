@@ -1,3 +1,4 @@
+import { checkWriter, currentWriter, readWriter, requireCompatibleWriter, writerContents, writerPath } from './writer.js'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile, rename, rm, readdir, lstat } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
@@ -32,12 +33,14 @@ async function verifyRecoveredSource(root:string, expected:string):Promise<void>
 /** Called explicitly after a crash; a lock never silently expires. */
 export async function recoverUnits(root: string): Promise<void> {
   await withProjectLock(root,async()=>{
+    const installed=await currentWriter();requireCompatibleWriter(installed,await readWriter(root));
     const path=await safePath(root,journalName); if (!await exists(path)) return
     const journal: unknown=JSON.parse(await readFile(path,'utf8'))
     if (!journal || typeof journal!=='object' || Array.isArray(journal) || Object.keys(journal).sort().join(',')!=='after,before,stage' ) throw new Error('malformed Unit transaction; preserve for manual recovery')
     const j=journal as {stage:string;before:string|null;after:string}
     if (!/^\.suo\/unit-stage-[a-f0-9-]{36}$/.test(j.stage) || (j.before!==null&&!/^[a-f0-9]{64}$/.test(j.before)) || !/^[a-f0-9]{64}$/.test(j.after)) throw new Error('invalid transaction identity')
     const current=await sourceIdentity(root), stage=await safePath(root,j.stage), backup=join(stage,'before')
+    for(const path of [`${j.stage}/suo/writer.json`,`${j.stage}/before/writer.json`])requireCompatibleWriter(installed,await readWriter(root,path))
     if (current===j.after) { await verifyRecoveredSource(root,j.after); await rm(stage,{recursive:true,force:true}); await rm(path); return }
     if (current===null && await exists(backup)) { if(await sourceIdentity(root,`${j.stage}/before`)!==j.before) throw new Error('backup recovery identity mismatch'); await rename(backup,join(root,'suo')); }
     else if (current!==j.before) throw new Error('transaction conflicts with current authority; preserve both states')
@@ -50,12 +53,13 @@ export async function saveUnits(root: string, snapshot: UnitSnapshot, expectedTo
   snapshot = JSON.parse(canonical(snapshot)) as UnitSnapshot
   if(!/^[a-f0-9]{64}$/.test(expectedToken)) throw new Error('observed repository content token required')
   await withProjectLock(root,async()=>{
+    const {installed:writer}=await checkWriter(root)
     const journal=await safePath(root,journalName);if(await exists(journal))throw new Error('pending Unit transaction: recover before reading/writing')
     const current=await readRepository(root,'working-tree');if(current.token!==expectedToken)throw new Error('stale repository inputs: reload before saving')
     const observedAuthority = [...current.contents].filter(([path])=>path.startsWith('suo/')).map(([path,bytes])=>[path,bytes.toString('base64')] as [string,string]).sort(([a],[b])=>a<b?-1:a>b?1:0)
     const observedAuthorityIdentity = observedAuthority.length ? digest(observedAuthority) : null
     if (await sourceIdentity(root) !== observedAuthorityIdentity) throw new Error('authority contains unobserved or concurrently changed files; include it in the Git candidate')
-    if (observedAuthority.some(([path])=>path!=='suo/ontology.d.ts' && !path.endsWith('.suo.ts'))) throw new Error('authority replacement would remove auxiliary files; migrate these explicitly first')
+    if (observedAuthority.some(([path])=>path!=='suo/ontology.d.ts' && path!==writerPath && !path.endsWith('.suo.ts'))) throw new Error('authority replacement would remove auxiliary files; migrate these explicitly first')
     resolveCoverageSymbols(snapshot,current)
     inspectUnits(snapshot,current.context)
     const stageName=`.suo/unit-stage-${randomUUID()}`,stage=await safePath(root,stageName)
@@ -63,6 +67,7 @@ export async function saveUnits(root: string, snapshot: UnitSnapshot, expectedTo
     let recorded=false
     try {
       for(const [path,content]of unitSourceContents(snapshot)){await mkdir(dirname(join(stage,path)),{recursive:true});await writeFile(join(stage,path),content)}
+      await writeFile(join(stage,writerPath),writerContents(writer))
       if(!isDeepStrictEqual(await loadUnits(stage),snapshot))throw new Error('Unit source roundtrip mismatch')
       if((await readRepository(root,'working-tree')).token!==expectedToken)throw new Error('repository changed while preparing Unit write')
       const before=await sourceIdentity(root),after=await sourceIdentity(stage)
@@ -81,8 +86,9 @@ export async function createUnitTemplate(root:string,snapshot:UnitSnapshot):Prom
  validateUnits(snapshot);snapshot=JSON.parse(canonical(snapshot)) as UnitSnapshot;
  await withProjectLock(root,async()=>{
   if(await exists(await safePath(root,journalName)))throw new Error('pending Unit transaction: recover before initializing');
+  const {installed:writer}=await checkWriter(root);
   const destination=await safePath(root,'suo');if(await exists(destination))throw new Error('authority already exists; inspect/migrate it rather than initializing over it');
   const stage=await safePath(root,`.suo/unit-template-${randomUUID()}`);await mkdir(stage,{recursive:true});
-  try{for(const[path,content]of unitSourceContents(snapshot)){await mkdir(dirname(join(stage,path)),{recursive:true});await writeFile(join(stage,path),content,{flag:'wx'})}if(!isDeepStrictEqual(await loadUnits(stage),snapshot))throw new Error('template roundtrip mismatch');await rename(join(stage,'suo'),destination)}finally{await rm(stage,{recursive:true,force:true})}
+  try{for(const[path,content]of unitSourceContents(snapshot)){await mkdir(dirname(join(stage,path)),{recursive:true});await writeFile(join(stage,path),content,{flag:'wx'})}await writeFile(join(stage,writerPath),writerContents(writer));if(!isDeepStrictEqual(await loadUnits(stage),snapshot))throw new Error('template roundtrip mismatch');await rename(join(stage,'suo'),destination)}finally{await rm(stage,{recursive:true,force:true})}
  })
 }
